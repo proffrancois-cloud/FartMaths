@@ -1,0 +1,1 @@
+{"root":["./src/main.tsx","./src/types.ts","./src/app/app.tsx","./src/data/catalog.ts","./src/data/rules.ts","./src/engine/progression.ts","./src/engine/questions.ts","./src/hooks/usespeech.ts","./src/lib/storage.ts"],"version":"5.9.3"}
