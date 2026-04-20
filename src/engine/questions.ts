@@ -1,11 +1,17 @@
-import { ACTIVITY_MIN_RESPONSE_MS } from "../data/rules";
 import { STRAND_MAP } from "../data/catalog";
+import { ACTIVITY_MIN_RESPONSE_MS } from "../data/rules";
 import type {
   ActivityType,
   AnswerChoice,
   ClockChoiceData,
+  CoinKind,
+  CoinVisual,
+  DragModel,
   GraphBar,
+  LayoutMode,
   QuestionDefinition,
+  QuestionExplanation,
+  ShapeKind,
   SkillDefinition,
   StrandId,
   TeachingMode,
@@ -30,8 +36,74 @@ const shuffle = <T,>(items: T[]) => {
   return clone;
 };
 
+const numberWordsBelowTwenty = [
+  "zero",
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+  "eight",
+  "nine",
+  "ten",
+  "eleven",
+  "twelve",
+  "thirteen",
+  "fourteen",
+  "fifteen",
+  "sixteen",
+  "seventeen",
+  "eighteen",
+  "nineteen"
+];
+
+const tensWords = [
+  "",
+  "",
+  "twenty",
+  "thirty",
+  "forty",
+  "fifty",
+  "sixty",
+  "seventy",
+  "eighty",
+  "ninety"
+];
+
+const numberToWords = (value: number): string => {
+  if (value < 20) {
+    return numberWordsBelowTwenty[value];
+  }
+  if (value < 100) {
+    const tens = Math.floor(value / 10);
+    const ones = value % 10;
+    return ones === 0 ? tensWords[tens] : `${tensWords[tens]}-${numberWordsBelowTwenty[ones]}`;
+  }
+  if (value < 1000) {
+    const hundreds = Math.floor(value / 100);
+    const rest = value % 100;
+    return rest === 0
+      ? `${numberWordsBelowTwenty[hundreds]} hundred`
+      : `${numberWordsBelowTwenty[hundreds]} hundred ${numberToWords(rest)}`;
+  }
+  if (value === 1000) {
+    return "one thousand";
+  }
+  return String(value);
+};
+
 const uniqueNumbers = (correct: number, count: number, min: number, max: number) => {
   const values = new Set<number>([correct]);
+  while (values.size < count) {
+    values.add(rand(min, max));
+  }
+  return shuffle([...values]);
+};
+
+const uniqueValues = (count: number, min: number, max: number) => {
+  const values = new Set<number>();
   while (values.size < count) {
     values.add(rand(min, max));
   }
@@ -47,257 +119,375 @@ const numberChoices = (
   uniqueNumbers(correct, count, min, max).map((value) => ({
     id: `choice-${value}`,
     label: String(value),
-    value
+    speechLabel: numberToWords(value),
+    value,
+    renderKind: "number"
   }));
 
-const stringChoices = (correct: string, options: string[]): AnswerChoice[] =>
+const textChoices = (correct: string, options: string[]): AnswerChoice[] =>
   shuffle(
     options.map((value) => ({
-      id: `choice-${value}`,
+      id: value === correct ? `correct-${value}` : `choice-${value}`,
       label: value,
-      value
+      speechLabel: value,
+      value,
+      renderKind: "text" as const
     }))
-  ).map((choice) => ({
-    ...choice,
-    id: choice.value === correct ? `correct-${choice.value}` : choice.id
-  }));
+  );
 
-const supportTextForMode = (skill: SkillDefinition, mode: TeachingMode) => {
-  if (mode === "example") return skill.scaffold.concrete;
-  if (mode === "check") return skill.scaffold.abstract;
-  return skill.scaffold.pictorial;
-};
-
-const typeForSkill = (skill: SkillDefinition): ActivityType => {
-  if (skill.strandId === "addition-subtraction" && skill.level >= 6) {
-    return "number-line-tap";
+const groupsFromCounts = (left: number, right: number, leftLabel: string, rightLabel: string): VisualGroup[] => [
+  {
+    id: randomId(),
+    count: left,
+    token: "💩",
+    color: "#7dc6ff",
+    label: leftLabel
+  },
+  {
+    id: randomId(),
+    count: right,
+    token: "💨",
+    color: "#ffbc67",
+    label: rightLabel
   }
-  if (skill.strandId === "measurement" && skill.level >= 4) {
-    return "drag-to-match";
-  }
-  if (skill.strandId === "equal-shares" && skill.level >= 8) {
-    return "drag-to-match";
-  }
-  if (skill.strandId === "arrays-odd-even" && skill.level <= 2) {
-    return "odd-even-pairing";
-  }
-  return skill.activityType;
-};
-
-const bubbleToken = ["💨", "✨", "🫧", "💩", "🧻"];
-const graphColors = ["#7ed89f", "#7dc6ff", "#ffbc67", "#ff8cb1", "#c7a8ff"];
-const shapeSet = ["circle", "square", "triangle", "rectangle", "hexagon"];
-const equalShareOptions = [
-  "Equal halves",
-  "Unequal pieces",
-  "Equal fourths",
-  "Three fair shares"
 ];
 
-const makeBase = (
+const makeExplanation = (
+  text: string,
+  correctAnswerLabel: string
+): QuestionExplanation => ({
+  text,
+  speech: text,
+  correctAnswerLabel
+});
+
+const promptVariant = (skill: SkillDefinition, seed: number) => {
+  const visibleModes = ["minimal", "visible", "audio-only"] as const;
+  const mode = visibleModes[(skill.level + seed) % visibleModes.length];
+  return mode;
+};
+
+const buildBase = (
   skill: SkillDefinition,
   mode: TeachingMode,
-  prompt: string,
-  speech: string,
-  hint: string
-): Pick<
-  QuestionDefinition,
-  "id" | "skillId" | "strandId" | "level" | "mode" | "prompt" | "speech" | "supportText" | "hint" | "minResponseMs"
-> => ({
+  config: {
+    prompt: string;
+    speech: string;
+    hint: string;
+    explanation: QuestionExplanation;
+    activityType: ActivityType;
+    layout?: LayoutMode;
+    instructionVisibility?: "visible" | "minimal" | "audio-only";
+    choiceVisibility?: "visible" | "audio-only";
+    promptCue?: string;
+  }
+) => ({
   id: randomId(),
   skillId: skill.id,
   strandId: skill.strandId,
   level: skill.level,
   mode,
-  prompt,
-  speech,
-  supportText: supportTextForMode(skill, mode),
-  hint,
-  minResponseMs: ACTIVITY_MIN_RESPONSE_MS[typeForSkill(skill)]
+  type: config.activityType,
+  prompt: config.prompt,
+  speech: config.speech,
+  supportText:
+    mode === "example"
+      ? skill.scaffold.concrete
+      : mode === "check"
+        ? skill.scaffold.abstract
+        : skill.scaffold.pictorial,
+  hint: config.hint,
+  hintSpeech: config.hint,
+  minResponseMs: ACTIVITY_MIN_RESPONSE_MS[config.activityType],
+  presentation: {
+    instructionVisibility: config.instructionVisibility ?? "visible",
+    choiceVisibility: config.choiceVisibility ?? "visible",
+    layout: config.layout ?? "grid",
+    promptCue: config.promptCue
+  },
+  explanation: config.explanation
 });
 
-const group = (count: number, color: string, label?: string): VisualGroup => ({
-  id: randomId(),
-  count,
-  color,
-  label,
-  token: sample(bubbleToken)
+const shapeChoice = (shape: ShapeKind, idPrefix = "shape"): AnswerChoice => ({
+  id: `${idPrefix}-${shape}`,
+  label: shape,
+  speechLabel: shape,
+  value: shape,
+  renderKind: "shape",
+  shape
 });
 
-const formatTime = (hour: number, minute: number) =>
-  `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+const coinLibrary: Record<CoinKind, CoinVisual> = {
+  penny: { id: "coin-penny", kind: "penny", label: "Penny", value: 1 },
+  nickel: { id: "coin-nickel", kind: "nickel", label: "Nickel", value: 5 },
+  dime: { id: "coin-dime", kind: "dime", label: "Dime", value: 10 },
+  quarter: { id: "coin-quarter", kind: "quarter", label: "Quarter", value: 25 },
+  dollar: { id: "coin-dollar", kind: "dollar", label: "Dollar", value: 100 }
+};
 
-const clockChoiceSet = (hour: number, minute: number): ClockChoiceData[] => {
-  const choices = new Map<string, ClockChoiceData>();
-  choices.set(formatTime(hour, minute), {
-    targetHour: hour,
-    targetMinute: minute,
-    label: formatTime(hour, minute)
-  });
+const describeTime = (hour: number, minute: number) => {
+  if (minute === 0) {
+    return `${numberToWords(hour)} o'clock`;
+  }
+  if (minute === 15) {
+    return `quarter past ${numberToWords(hour)}`;
+  }
+  if (minute === 30) {
+    return `half past ${numberToWords(hour)}`;
+  }
+  if (minute === 45) {
+    return `quarter to ${numberToWords(hour === 12 ? 1 : hour + 1)}`;
+  }
+  return `${numberToWords(hour)} ${numberToWords(minute)}`;
+};
 
-  while (choices.size < 4) {
-    const maybeMinute = sample([0, 30, 5, 10, 15, 20, 25, 35, 40, 45, 50, 55]);
-    const maybeHour = rand(1, 12);
-    choices.set(formatTime(maybeHour, maybeMinute), {
-      targetHour: maybeHour,
-      targetMinute: maybeMinute,
-      label: formatTime(maybeHour, maybeMinute)
-    });
+const buildDragChoices = (choices: AnswerChoice[], targetLabel: string): DragModel => ({
+  mode: "choice-to-target",
+  targets: [{ id: "target-drop", label: targetLabel, position: "center" }]
+});
+
+const buildPromptToZoneDrag = (
+  promptItem: AnswerChoice,
+  leftLabel: string,
+  rightLabel: string
+): DragModel => ({
+  mode: "prompt-to-zones",
+  promptItem,
+  targets: [
+    { id: "zone-left", label: leftLabel, position: "left" },
+    { id: "zone-right", label: rightLabel, position: "right" }
+  ]
+});
+
+const numberRecognitionQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
+  const max = [5, 10, 20, 30, 50, 100, 120, 150, 500, 1000][skill.level - 1];
+  const target = skill.level <= 3 ? rand(0, max) : sample([rand(0, max), sample([10, 20, 30, 40, 50, 60, 70, 80, 90])]);
+  const word = numberToWords(target);
+  const instructionVisibility = promptVariant(skill, target);
+  const prompt =
+    instructionVisibility === "audio-only"
+      ? "Listen and drag the matching numeral."
+      : `Drag the numeral for ${word}.`;
+  const speech = `Drag the numeral ${word}.`;
+  const choices = numberChoices(target, Math.max(0, target - 4), Math.max(target + 6, 10));
+
+  return {
+    ...buildBase(skill, mode, {
+      prompt,
+      speech,
+      hint: `The numeral ${target} is the written way to show ${word}.`,
+      explanation: makeExplanation(
+        `${target} is the numeral for ${word}.`,
+        String(target)
+      ),
+      activityType: "drag-to-match",
+      instructionVisibility,
+      promptCue: skill.level <= 2 ? `${"💨 ".repeat(Math.max(1, target || 1)).trim()}` : undefined
+    }),
+    choices,
+    correctChoiceId: `choice-${target}`,
+    targetLabel: "Drop the match here",
+    drag: buildDragChoices(choices, "Drop the match here")
+  };
+};
+
+const cardinalityQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
+  const max = [3, 5, 10, 12, 15, 18, 20, 24, 30, 40][skill.level - 1];
+  const total = rand(Math.max(1, max - 3), max);
+  return {
+    ...buildBase(skill, mode, {
+      prompt: "Tap each silly thing one time, then press Done.",
+      speech: "Tap each silly thing one time, then press done.",
+      hint: "Each one gets one tap. No skipping and no double taps.",
+      explanation: makeExplanation(
+        `There are ${total} silly things altogether.`,
+        `${total}`
+      ),
+      activityType: "count-and-tap"
+    }),
+    choices: [],
+    correctChoiceId: `count-${total}`,
+    countTap: {
+      total,
+      token: sample(["💩", "🧻", "💨"]),
+      color: "#7ed89f"
+    }
+  };
+};
+
+const comparingQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
+  const max = [3, 10, 10, 20, 20, 99, 100, 120, 999, 999][skill.level - 1];
+  const values = uniqueValues(2, 1, max);
+  const left = values[0];
+  const right = values[1];
+  const correct = left > right ? "Left" : "Right";
+  const choices = [
+    {
+      id: "choice-left",
+      label: "Left",
+      speechLabel: "Left",
+      value: "left",
+      renderKind: "position" as const
+    },
+    {
+      id: "choice-right",
+      label: "Right",
+      speechLabel: "Right",
+      value: "right",
+      renderKind: "position" as const
+    }
+  ];
+
+  return {
+    ...buildBase(skill, mode, {
+      prompt: "Which side has more?",
+      speech: "Which side has more?",
+      hint: "Count the left side and the right side, then choose the bigger set.",
+      explanation: makeExplanation(
+        `The left side has ${left} and the right side has ${right}, so ${correct.toLowerCase()} has more.`,
+        correct
+      ),
+      activityType: "compare-two-groups",
+      layout: "left-right"
+    }),
+    choices,
+    correctChoiceId: correct === "Left" ? "choice-left" : "choice-right",
+    groups: groupsFromCounts(left, right, "Left", "Right")
+  };
+};
+
+const additionSubtractionQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
+  const limit = [3, 5, 10, 10, 20, 20, 100, 100, 100, 1000][skill.level - 1];
+
+  if (skill.level === 4) {
+    const filled = rand(1, 7);
+    const target = rand(filled + 1, 10);
+    return {
+      ...buildBase(skill, mode, {
+        prompt: `Tap more stalls until there are ${numberToWords(target)} full.`,
+        speech: `Tap more stalls until there are ${numberToWords(target)} full.`,
+        hint: "Start from the stalls already filled and add until you reach the target.",
+        explanation: makeExplanation(
+          `You started with ${filled} full stalls and needed ${target} full stalls.`,
+          String(target)
+        ),
+        activityType: "fill-ten-frame"
+      }),
+      choices: [],
+      correctChoiceId: `fill-${target}`,
+      tenFrame: {
+        target,
+        filled
+      }
+    };
   }
 
-  return shuffle([...choices.values()]);
-};
-
-const numberRecognitionQuestion = (
-  skill: SkillDefinition,
-  mode: TeachingMode
-): QuestionDefinition => {
-  const max = [5, 10, 20, 30, 50, 100, 120, 120, 1000, 1000][skill.level - 1];
-  const target = skill.level >= 8 ? sample([5, 10]) * rand(2, Math.min(10, Math.floor(max / 10))) : rand(0, max);
-  const base = makeBase(
-    skill,
-    mode,
-    `Tap the numeral for ${target}.`,
-    `Tap the numeral ${target}.`,
-    `Look for the card that says ${target}.`
-  );
-
-  return {
-    ...base,
-    type: "drag-to-match",
-    choices: numberChoices(target, Math.max(0, target - 3), Math.max(target + 5, 10)),
-    correctChoiceId: `choice-${target}`,
-    targetLabel: `${target}`
-  };
-};
-
-const cardinalityQuestion = (
-  skill: SkillDefinition,
-  mode: TeachingMode
-): QuestionDefinition => {
-  const max = [3, 5, 10, 20, 20, 20, 20, 24, 30, 40][skill.level - 1];
-  const count = rand(Math.max(1, max - 4), max);
-  const base = makeBase(
-    skill,
-    mode,
-    "Count the silly things. How many are there?",
-    "Count the silly things and tap how many there are.",
-    "Touch each item once, then choose the total."
-  );
-
-  return {
-    ...base,
-    type: "count-and-tap",
-    choices: numberChoices(count, 0, Math.max(count + 4, 6)),
-    correctChoiceId: `choice-${count}`,
-    groups: [group(count, "#7ed89f", "Count me")]
-  };
-};
-
-const comparingQuestion = (
-  skill: SkillDefinition,
-  mode: TeachingMode
-): QuestionDefinition => {
-  const max = [3, 10, 10, 20, 20, 99, 100, 120, 999, 999][skill.level - 1];
-  const left = rand(1, max);
-  const rightOffset = skill.level <= 2 ? rand(1, 3) : rand(0, 8);
-  const right = Math.max(1, left + sample([-1, 1]) * rightOffset);
-  const correct =
-    left === right ? "Same" : left > right ? "Left has more" : "Right has more";
-  const base = makeBase(
-    skill,
-    mode,
-    "Which side has more?",
-    "Look carefully. Which side has more, or are they the same?",
-    "Count or compare the two groups one by one."
-  );
-
-  return {
-    ...base,
-    type: "compare-two-groups",
-    choices: stringChoices(correct, ["Left has more", "Right has more", "Same"]),
-    correctChoiceId:
-      correct === "Left has more"
-        ? "correct-Left has more"
-        : correct === "Right has more"
-          ? "correct-Right has more"
-          : "correct-Same",
-    groups: [group(left, "#7dc6ff", "Left"), group(right, "#ffbc67", "Right")]
-  };
-};
-
-const additionQuestion = (
-  skill: SkillDefinition,
-  mode: TeachingMode
-): QuestionDefinition => {
-  const limit = [3, 5, 10, 10, 20, 20, 100, 100, 100, 1000][skill.level - 1];
-  const addendA = rand(1, Math.max(2, Math.floor(limit * 0.6)));
-  const addendB = rand(1, Math.max(2, Math.floor(limit * 0.4)));
-  const operation = sample(["+", "-"]);
-  const result = operation === "+" ? addendA + addendB : Math.max(0, addendA - rand(0, addendA));
-  const basePrompt =
-    operation === "+"
-      ? `What is ${addendA} plus ${addendB}?`
-      : `What is ${addendA} minus ${addendB}?`;
-  const base = makeBase(
-    skill,
-    mode,
-    basePrompt,
-    basePrompt,
-    operation === "+"
-      ? "Try joining the two groups together."
-      : "Try taking some away and count what is left."
-  );
+  const isSubtraction = skill.level >= 3 && Math.random() > 0.45;
+  const addendA = rand(1, Math.max(2, Math.floor(limit * 0.7)));
+  const addendB = isSubtraction
+    ? rand(0, addendA)
+    : rand(1, Math.max(2, Math.floor(limit * 0.4)));
+  const result = isSubtraction ? addendA - addendB : addendA + addendB;
+  const prompt =
+    skill.level >= 6
+      ? isSubtraction
+        ? `Tap the number you land on after moving back ${numberToWords(addendB)}.`
+        : `Tap the number you land on after jumping forward ${numberToWords(addendB)}.`
+      : isSubtraction
+        ? `What is ${numberToWords(addendA)} minus ${numberToWords(addendB)}?`
+        : `What is ${numberToWords(addendA)} plus ${numberToWords(addendB)}?`;
+  const explanation = isSubtraction
+    ? `${addendA} take away ${addendB} leaves ${result}.`
+    : `${addendA} plus ${addendB} makes ${result}.`;
 
   if (skill.level >= 6) {
+    const start = isSubtraction ? addendA : Math.max(0, addendA - 2);
+    const end = Math.max(result + 5, addendA + addendB + 3, 12);
     return {
-      ...base,
-      type: "number-line-tap",
-      choices: numberChoices(result, Math.max(0, result - 4), result + 8),
+      ...buildBase(skill, mode, {
+        prompt,
+        speech: prompt,
+        hint: isSubtraction
+          ? "Start at the bigger number and hop backward."
+          : "Start at the first number and hop forward.",
+        explanation: makeExplanation(explanation, String(result)),
+        activityType: "number-line-tap"
+      }),
+      choices: Array.from({ length: end - start + 1 }, (_, index) => {
+        const value = start + index;
+        return {
+          id: `choice-${value}`,
+          label: String(value),
+          speechLabel: numberToWords(value),
+          value,
+          renderKind: "number"
+        };
+      }),
       correctChoiceId: `choice-${result}`,
       numberLine: {
-        start: operation === "+" ? addendA : Math.max(0, addendA - addendB - 2),
-        end: Math.max(limit, result + 5),
+        start,
+        end,
         target: result,
-        jump: operation === "+" ? addendB : -addendB
+        jump: isSubtraction ? -addendB : addendB
       }
     };
   }
 
   return {
-    ...base,
-    type: "fill-ten-frame",
-    choices: numberChoices(result, 0, Math.max(limit, result + 3)),
+    ...buildBase(skill, mode, {
+      prompt,
+      speech: prompt,
+      hint: isSubtraction
+        ? "Use the pictures and count what is left."
+        : "Join the groups together and count the total.",
+      explanation: makeExplanation(explanation, String(result)),
+      activityType: "choose-the-answer"
+    }),
+    choices: numberChoices(result, Math.max(0, result - 4), result + 5),
     correctChoiceId: `choice-${result}`,
-    tenFrame: {
-      target: Math.min(10, addendA + addendB),
-      filled: Math.min(10, addendA)
-    },
-    groups: [group(addendA, "#ff9b8d", "First"), group(addendB, "#7ed89f", "Second")]
+    groups: [
+      {
+        id: randomId(),
+        count: addendA,
+        token: isSubtraction ? "🚽" : "💩",
+        color: "#ff9b8d",
+        label: "First group"
+      },
+      {
+        id: randomId(),
+        count: addendB,
+        token: isSubtraction ? "💨" : "🧻",
+        color: "#7ed89f",
+        label: isSubtraction ? "Taken away" : "Second group"
+      }
+    ]
   };
 };
 
-const placeValueQuestion = (
-  skill: SkillDefinition,
-  mode: TeachingMode
-): QuestionDefinition => {
-  const hundreds = skill.level >= 8 ? rand(1, Math.min(3, skill.level - 6)) : 0;
-  const tens = skill.level >= 2 ? rand(1, skill.level >= 8 ? 9 : 4) : 0;
+const placeValueQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
+  const hundreds = skill.level >= 8 ? rand(0, Math.min(3, skill.level - 6)) : 0;
+  const tens = skill.level >= 2 ? rand(1, skill.level >= 8 ? 9 : 5) : 0;
   const ones = rand(0, skill.level >= 5 ? 9 : 5);
   const target = hundreds * 100 + tens * 10 + ones;
-  const prompt = target < 20 ? `Build the teen number ${target}.` : `Which number matches these bundles?`;
-  const base = makeBase(
-    skill,
-    mode,
-    prompt,
-    prompt,
-    "Count the big bundles first, then the small ones."
-  );
 
   return {
-    ...base,
-    type: "build-a-number",
-    choices: numberChoices(target, Math.max(0, target - 20), target + 30),
+    ...buildBase(skill, mode, {
+      prompt:
+        target < 20
+          ? `Build ${numberToWords(target)}.`
+          : "Build the number shown by the bundles.",
+      speech:
+        target < 20
+          ? `Build ${numberToWords(target)}.`
+          : `Build the number with ${hundreds} hundreds, ${tens} tens, and ${ones} ones.`,
+      hint: "Count hundreds first, then tens, then ones.",
+      explanation: makeExplanation(
+        `${hundreds} hundreds, ${tens} tens, and ${ones} ones make ${target}.`,
+        String(target)
+      ),
+      activityType: "build-a-number"
+    }),
+    choices: [],
     correctChoiceId: `choice-${target}`,
     buildNumber: {
       hundreds,
@@ -308,280 +498,416 @@ const placeValueQuestion = (
   };
 };
 
-const wordProblemQuestion = (
-  skill: SkillDefinition,
-  mode: TeachingMode
-): QuestionDefinition => {
-  const total = rand(4, skill.level >= 6 ? 40 : 12);
-  const change = rand(1, Math.max(2, Math.floor(total / 2)));
-  const addStory = Math.random() > 0.5;
-  const answer = addStory ? total + change : total - change;
-  const scene = addStory
-    ? `A poop monster had ${total} corn kernels. Then ${change} more rolled in.`
-    : `A fart cloud had ${total} bubbles. Then ${change} popped away.`;
-  const question = "How many are there now?";
-  const prompt = `${scene} ${question}`;
-  const base = makeBase(
-    skill,
-    mode,
-    prompt,
-    prompt,
-    "Watch the story picture and think about whether more joined or some went away."
-  );
+const wordProblemQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
+  const start = rand(3, skill.level >= 6 ? 40 : 12);
+  const change = rand(1, Math.max(2, Math.floor(start / 2)));
+  const isAddition = Math.random() > 0.5;
+  const answer = isAddition ? start + change : start - Math.min(change, start);
+  const action = isAddition ? "more rolled in" : "rolled away";
+  const equation = isAddition ? `${start} + ${change}` : `${start} - ${Math.min(change, start)}`;
+  const scene = `A poop monster had ${start} corn kernels. Then ${change} ${action}.`;
+  const prompt = `${scene} How many are there now?`;
 
   return {
-    ...base,
-    type: "story-scene",
+    ...buildBase(skill, mode, {
+      prompt,
+      speech: prompt,
+      hint: "Look at whether more joined or some went away.",
+      explanation: makeExplanation(
+        `${equation} equals ${answer}.`,
+        String(answer)
+      ),
+      activityType: "story-scene"
+    }),
     choices: numberChoices(answer, Math.max(0, answer - 4), answer + 5),
     correctChoiceId: `choice-${answer}`,
     story: {
       scene,
-      equation: addStory ? `${total} + ${change}` : `${total} - ${change}`
+      equation
     }
   };
 };
 
-const measurementQuestion = (
-  skill: SkillDefinition,
-  mode: TeachingMode
-): QuestionDefinition => {
-  const left = rand(2, 10 + skill.level);
-  const right = rand(2, 10 + skill.level);
-  const relation =
-    left === right ? "Same length" : left > right ? "Left is longer" : "Right is longer";
-  const prompt =
-    skill.level <= 3
-      ? "Which one is longer?"
-      : "Match the ruler idea to the longer object.";
-  const base = makeBase(
-    skill,
-    mode,
-    prompt,
-    prompt,
-    "Compare one end to the other end so the starts line up."
-  );
+const measurementQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
+  const lengths = uniqueValues(2, 2, 12 + skill.level);
+  const left = lengths[0];
+  const right = lengths[1];
+  const correctSide = left > right ? "Left" : "Right";
+
+  if (skill.level >= 4) {
+    const promptItem: AnswerChoice = {
+      id: "prompt-longer",
+      label: "Longer",
+      speechLabel: "Longer",
+      value: "longer",
+      renderKind: "text"
+    };
+    return {
+      ...buildBase(skill, mode, {
+        prompt: "Drag LONGER to the correct worm.",
+        speech: "Drag the word longer to the correct worm.",
+        hint: "Compare where each worm starts and ends. The longer one reaches farther.",
+        explanation: makeExplanation(
+          `The left worm is ${left} units and the right worm is ${right} units, so ${correctSide.toLowerCase()} is longer.`,
+          correctSide
+        ),
+        activityType: "drag-to-match",
+        layout: "left-right"
+      }),
+      choices: [
+        { id: "zone-left", label: "Left", speechLabel: "Left", value: "left", renderKind: "position" },
+        { id: "zone-right", label: "Right", speechLabel: "Right", value: "right", renderKind: "position" }
+      ],
+      correctChoiceId: correctSide === "Left" ? "zone-left" : "zone-right",
+      groups: groupsFromCounts(left, right, "Left worm", "Right worm"),
+      drag: buildPromptToZoneDrag(promptItem, "Left", "Right")
+    };
+  }
 
   return {
-    ...base,
-    type: skill.level <= 3 ? "choose-the-answer" : "drag-to-match",
-    choices: stringChoices(relation, ["Left is longer", "Right is longer", "Same length"]),
-    correctChoiceId:
-      relation === "Left is longer"
-        ? "correct-Left is longer"
-        : relation === "Right is longer"
-          ? "correct-Right is longer"
-          : "correct-Same length",
-    groups: [group(left, "#7dc6ff", "Left worm"), group(right, "#ffbc67", "Right worm")]
+    ...buildBase(skill, mode, {
+      prompt: "Which worm is longer?",
+      speech: "Which worm is longer?",
+      hint: "Look for the worm that reaches farther.",
+      explanation: makeExplanation(
+        `The left worm is ${left} units and the right worm is ${right} units, so ${correctSide.toLowerCase()} is longer.`,
+        correctSide
+      ),
+      activityType: "choose-the-answer",
+      layout: "left-right"
+    }),
+    choices: [
+      { id: "choice-left", label: "Left", speechLabel: "Left", value: "left", renderKind: "position" },
+      { id: "choice-right", label: "Right", speechLabel: "Right", value: "right", renderKind: "position" }
+    ],
+    correctChoiceId: correctSide === "Left" ? "choice-left" : "choice-right",
+    groups: groupsFromCounts(left, right, "Left worm", "Right worm")
   };
 };
 
-const timeQuestion = (
-  skill: SkillDefinition,
-  mode: TeachingMode
-): QuestionDefinition => {
-  const minutesPool =
+const timeQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
+  const minutePool =
     skill.level <= 2
       ? [0]
       : skill.level <= 4
         ? [0, 30]
-        : [0, 30, 5, 10, 15, 20, 25, 35, 40, 45, 50, 55];
+        : [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
   const hour = rand(1, 12);
-  const minute = sample(minutesPool);
+  const minute = sample(minutePool);
   const label = `${hour}:${String(minute).padStart(2, "0")}`;
-  const prompt = `Tap the clock that says ${label}.`;
-  const choices = clockChoiceSet(hour, minute);
-  const correctChoice = choices.find((choice) => choice.label === formatTime(hour, minute));
-  const base = makeBase(
-    skill,
-    mode,
-    prompt,
-    `Tap the clock that says ${label}.`,
-    "Look for the hour hand first, then the minute hand."
-  );
+  const spoken = describeTime(hour, minute);
+  const choices = new Map<string, ClockChoiceData>();
+  choices.set(label, { targetHour: hour, targetMinute: minute, label });
+
+  while (choices.size < 4) {
+    const maybeHour = rand(1, 12);
+    const maybeMinute = sample(minutePool);
+    const maybeLabel = `${maybeHour}:${String(maybeMinute).padStart(2, "0")}`;
+    choices.set(maybeLabel, {
+      targetHour: maybeHour,
+      targetMinute: maybeMinute,
+      label: maybeLabel
+    });
+  }
+
+  const choiceArray = shuffle([...choices.values()]);
 
   return {
-    ...base,
-    type: "clock-choice",
-    choices: choices.map((choice) => ({
+    ...buildBase(skill, mode, {
+      prompt:
+        promptVariant(skill, minute) === "audio-only"
+          ? "Listen and tap the matching clock."
+          : `Tap the clock for ${spoken}.`,
+      speech: `Tap the clock for ${spoken}.`,
+      hint: "Look at the short hand first. Then check the long hand.",
+      explanation: makeExplanation(
+        `The correct clock shows ${label}.`,
+        label
+      ),
+      activityType: "clock-choice",
+      instructionVisibility: promptVariant(skill, minute),
+      layout: "clock-grid"
+    }),
+    choices: choiceArray.map((choice) => ({
       id: `clock-${choice.label}`,
       label: choice.label,
-      value: choice.label
+      speechLabel: describeTime(choice.targetHour, choice.targetMinute),
+      value: choice.label,
+      renderKind: "clock"
     })),
-    correctChoiceId: `clock-${correctChoice?.label ?? formatTime(hour, minute)}`,
-    clockChoices: choices
+    correctChoiceId: `clock-${label}`,
+    clockChoices: choiceArray
   };
 };
 
-const moneyQuestion = (
-  skill: SkillDefinition,
-  mode: TeachingMode
-): QuestionDefinition => {
-  const coinValues = [1, 5, 10, 25];
-  const coinCount = rand(2, skill.level >= 7 ? 5 : 3);
-  const picked = Array.from({ length: coinCount }, () => sample(coinValues));
-  const total = picked.reduce((sum, value) => sum + value, 0);
-  const prompt = "Count the coins. How much stink-cash is here?";
-  const base = makeBase(
-    skill,
-    mode,
-    prompt,
-    prompt,
-    "Count coin values carefully. Nickels are 5, dimes are 10, and quarters are 25."
-  );
+const moneyQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
+  const coinKinds: CoinKind[] = ["penny", "nickel", "dime", "quarter"];
 
+  if (skill.level <= 3) {
+    const targetKind = sample(coinKinds);
+    const choiceKinds = shuffle(coinKinds).slice(0, 4);
+    if (!choiceKinds.includes(targetKind)) {
+      choiceKinds[0] = targetKind;
+    }
+
+    const choices = shuffle(choiceKinds).map((kind) => ({
+      id: kind === targetKind ? `correct-${kind}` : `choice-${kind}`,
+      label: coinLibrary[kind].label,
+      speechLabel: coinLibrary[kind].label,
+      value: kind,
+      renderKind: "coin" as const,
+      coin: kind,
+      numericValue: coinLibrary[kind].value
+    }));
+
+    return {
+      ...buildBase(skill, mode, {
+        prompt: `Tap the ${coinLibrary[targetKind].label.toLowerCase()}.`,
+        speech: `Tap the ${coinLibrary[targetKind].label.toLowerCase()}.`,
+        hint: "Look at the coin name and size.",
+        explanation: makeExplanation(
+          `The ${coinLibrary[targetKind].label.toLowerCase()} is worth ${coinLibrary[targetKind].value} cents.`,
+          coinLibrary[targetKind].label
+        ),
+        activityType: "choose-the-answer"
+      }),
+      choices,
+      correctChoiceId: `correct-${targetKind}`
+    };
+  }
+
+  const coinCount = skill.level >= 7 ? rand(3, 6) : rand(2, 4);
+  const pickedKinds = Array.from({ length: coinCount }, () => sample(coinKinds));
+  const coins = pickedKinds.map((kind, index) => ({
+    ...coinLibrary[kind],
+    id: `coin-${index}-${kind}`
+  }));
+  const total = coins.reduce((sum, coin) => sum + coin.value, 0);
   return {
-    ...base,
-    type: "coin-counting",
+    ...buildBase(skill, mode, {
+      prompt: "Count the coins. How much money is here?",
+      speech: "Count the coins. How much money is here?",
+      hint: "Add each coin's value carefully.",
+      explanation: makeExplanation(
+        `The coins add up to ${total} cents.`,
+        `${total} cents`
+      ),
+      activityType: "coin-counting"
+    }),
     choices: numberChoices(total, 0, Math.max(50, total + 20)),
     correctChoiceId: `choice-${total}`,
-    groups: picked.map((value, index) =>
-      group(
-        1,
-        value === 25 ? "#ffd86c" : value === 10 ? "#bcd6ff" : value === 5 ? "#ffe8ad" : "#f2b7b7",
-        `Coin ${index + 1}: ${value}¢`
-      )
-    )
+    coins
   };
 };
 
-const graphQuestion = (
-  skill: SkillDefinition,
-  mode: TeachingMode
-): QuestionDefinition => {
-  const bars: GraphBar[] = ["Corn", "Beans", "Toast", "Apples"].map((label, index) => ({
+const graphQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
+  const labels = ["Corn", "Beans", "Toast", "Apples"];
+  const values = uniqueValues(labels.length, 1, 2 + skill.level);
+  const bars: GraphBar[] = labels.map((label, index) => ({
     label,
-    value: rand(1, 2 + skill.level),
-    color: graphColors[index]
+    value: values[index],
+    color: ["#7ed89f", "#7dc6ff", "#ffbc67", "#ff8cb1"][index]
   }));
   const winningBar = [...bars].sort((left, right) => right.value - left.value)[0];
-  const prompt = "Which snack made the biggest stink bar?";
-  const base = makeBase(
-    skill,
-    mode,
-    prompt,
-    prompt,
-    "Find the bar that reaches the highest."
-  );
-
   return {
-    ...base,
-    type: "graph-reading",
+    ...buildBase(skill, mode, {
+      prompt: "Which snack made the biggest stink bar?",
+      speech: "Which snack made the biggest stink bar?",
+      hint: "Find the bar that reaches the highest point.",
+      explanation: makeExplanation(
+        `${winningBar.label} has the highest bar with ${winningBar.value}.`,
+        winningBar.label
+      ),
+      activityType: "graph-reading"
+    }),
     choices: bars.map((bar) => ({
       id: `bar-${bar.label}`,
       label: bar.label,
-      value: bar.label
+      speechLabel: bar.label,
+      value: bar.label,
+      renderKind: "text"
     })),
     correctChoiceId: `bar-${winningBar.label}`,
     graph: {
       bars,
-      question: prompt
+      question: "Which snack made the biggest stink bar?"
     }
   };
 };
 
-const geometryQuestion = (
-  skill: SkillDefinition,
-  mode: TeachingMode
-): QuestionDefinition => {
-  const correct = sample(shapeSet.slice(0, Math.min(shapeSet.length, skill.level + 2)));
-  const prompt = "Which shape belongs in the potty bin?";
-  const base = makeBase(
-    skill,
-    mode,
-    prompt,
-    "Choose the shape that matches the potty bin.",
-    "Look at the corners and sides before you tap."
-  );
+const geometryQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
+  const shapesByLevel: ShapeKind[][] = [
+    ["circle", "square", "triangle"],
+    ["circle", "square", "triangle", "rectangle"],
+    ["circle", "square", "triangle", "rectangle", "hexagon"],
+    ["triangle", "rectangle", "hexagon", "circle"],
+    ["triangle", "rectangle", "hexagon", "square"],
+    ["cube", "sphere", "cylinder", "cone"],
+    ["triangle", "rectangle", "hexagon", "square"],
+    ["circle", "square", "triangle", "rectangle", "hexagon"],
+    ["rectangle", "square", "triangle", "hexagon"],
+    ["rectangle", "square", "triangle", "hexagon"]
+  ];
+  const pool = shapesByLevel[skill.level - 1];
+  const correct = sample(pool);
+  const distractors = shuffle(pool.filter((shape) => shape !== correct)).slice(0, 3);
+  const choices = shuffle([correct, ...distractors]).map((shape) => ({
+    ...shapeChoice(shape, shape === correct ? "correct" : "choice")
+  }));
 
   return {
-    ...base,
-    type: "shape-sort",
-    choices: shuffle(
-      shapeSet.slice(0, 4).map((shape) => ({
-        id: shape === correct ? `correct-${shape}` : `shape-${shape}`,
-        label: shape,
-        value: shape
-      }))
-    ),
+    ...buildBase(skill, mode, {
+      prompt: `Drag the ${correct} into the shape bin.`,
+      speech: `Drag the ${correct} into the shape bin.`,
+      hint: "Match the shape's sides and corners to the label.",
+      explanation: makeExplanation(
+        `The correct shape is ${correct}.`,
+        correct
+      ),
+      activityType: "shape-sort"
+    }),
+    choices,
     correctChoiceId: `correct-${correct}`,
-    targetLabel: correct
+    targetLabel: correct,
+    drag: buildDragChoices(choices, `${correct} bin`)
   };
 };
 
-const equalSharesQuestion = (
-  skill: SkillDefinition,
-  mode: TeachingMode
-): QuestionDefinition => {
-  const correct =
+const equalSharesQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
+  const optionPool: AnswerChoice[] = [
+    {
+      id: "choice-equal-halves",
+      label: "Equal halves",
+      speechLabel: "Equal halves",
+      value: "equal-halves",
+      renderKind: "fraction",
+      partition: { shape: "circle", parts: 2, equal: true, highlightedParts: 1 }
+    },
+    {
+      id: "choice-unequal-pieces",
+      label: "Unequal pieces",
+      speechLabel: "Unequal pieces",
+      value: "unequal-pieces",
+      renderKind: "fraction",
+      partition: { shape: "circle", parts: 2, equal: false, highlightedParts: 1 }
+    },
+    {
+      id: "choice-equal-fourths",
+      label: "Equal fourths",
+      speechLabel: "Equal fourths",
+      value: "equal-fourths",
+      renderKind: "fraction",
+      partition: { shape: "circle", parts: 4, equal: true, highlightedParts: 1 }
+    },
+    {
+      id: "choice-three-fair-shares",
+      label: "Three fair shares",
+      speechLabel: "Three fair shares",
+      value: "three-fair-shares",
+      renderKind: "fraction",
+      partition: { shape: "circle", parts: 3, equal: true, highlightedParts: 1 }
+    }
+  ];
+
+  const correctId =
     skill.level <= 2
-      ? "Equal halves"
+      ? "choice-equal-halves"
       : skill.level <= 5
-        ? "Equal fourths"
-        : skill.level <= 7
-          ? "Three fair shares"
-          : sample(["Equal halves", "Equal fourths", "Three fair shares"]);
-  const prompt = "Pick the fair share picture.";
-  const base = makeBase(
-    skill,
-    mode,
-    prompt,
-    prompt,
-    "Fair shares mean all the pieces are the same size."
-  );
+        ? "choice-equal-fourths"
+        : "choice-three-fair-shares";
 
-  const type: ActivityType = skill.level >= 8 ? "drag-to-match" : "choose-the-answer";
+  const choices = shuffle(optionPool);
+
+  if (skill.level >= 8) {
+    return {
+      ...buildBase(skill, mode, {
+        prompt: "Drag the fair-share picture into the toilet tray.",
+        speech: "Drag the fair-share picture into the toilet tray.",
+        hint: "Fair shares mean all the pieces are the same size.",
+        explanation: makeExplanation(
+          `${choices.find((choice) => choice.id === correctId)?.label} shows fair shares.`,
+          choices.find((choice) => choice.id === correctId)?.label ?? ""
+        ),
+        activityType: "drag-to-match"
+      }),
+      choices,
+      correctChoiceId: correctId,
+      drag: buildDragChoices(choices, "Fair share tray")
+    };
+  }
+
   return {
-    ...base,
-    type,
-    choices: equalShareOptions.map((option) => ({
-      id: option === correct ? `correct-${option}` : `share-${option}`,
-      label: option,
-      value: option
-    })),
-    correctChoiceId: `correct-${correct}`
+    ...buildBase(skill, mode, {
+      prompt: "Pick the fair share picture.",
+      speech: "Pick the fair share picture.",
+      hint: "Fair shares mean equal-size pieces.",
+      explanation: makeExplanation(
+        `${choices.find((choice) => choice.id === correctId)?.label} shows equal shares.`,
+        choices.find((choice) => choice.id === correctId)?.label ?? ""
+      ),
+      activityType: "choose-the-answer"
+    }),
+    choices,
+    correctChoiceId: correctId
   };
 };
 
-const arraysQuestion = (
-  skill: SkillDefinition,
-  mode: TeachingMode
-): QuestionDefinition => {
+const arraysQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
   if (skill.level <= 2) {
-    const count = rand(3, 11);
-    const odd = count % 2 === 1;
-    const prompt = "Is this set odd or even?";
-    const base = makeBase(
-      skill,
-      mode,
-      prompt,
-      prompt,
-      "Try pairing the objects. One left over means odd."
-    );
+    const total = rand(3, 11);
+    const correct = total % 2 === 0 ? "Even" : "Odd";
+    const promptItem: AnswerChoice = {
+      id: "prompt-socks",
+      label: `${total} socks`,
+      speechLabel: `${total} socks`,
+      value: total,
+      renderKind: "text"
+    };
 
     return {
-      ...base,
-      type: "odd-even-pairing",
-      choices: stringChoices(odd ? "Odd" : "Even", ["Odd", "Even"]),
-      correctChoiceId: odd ? "correct-Odd" : "correct-Even",
-      groups: [group(count, "#9cf0ef", `${count} socks`)]
+      ...buildBase(skill, mode, {
+        prompt: "Drag the sock group to odd or even.",
+        speech: "Drag the sock group to odd or even.",
+        hint: "If one sock is left without a pair, it is odd.",
+        explanation: makeExplanation(
+          `${total} is ${correct.toLowerCase()} because ${correct === "Even" ? "all the socks can make pairs." : "one sock is left over."}`,
+          correct
+        ),
+        activityType: "odd-even-pairing",
+        layout: "left-right"
+      }),
+      choices: [
+        { id: "zone-left", label: "Odd", speechLabel: "Odd", value: "odd", renderKind: "text" },
+        { id: "zone-right", label: "Even", speechLabel: "Even", value: "even", renderKind: "text" }
+      ],
+      correctChoiceId: correct === "Odd" ? "zone-left" : "zone-right",
+      groups: [
+        {
+          id: randomId(),
+          count: total,
+          token: "🧦",
+          color: "#9cf0ef",
+          label: `${total} socks`
+        }
+      ],
+      drag: buildPromptToZoneDrag(promptItem, "Odd", "Even")
     };
   }
 
   const rows = rand(2, Math.min(5, 1 + skill.level));
   const columns = rand(2, Math.min(5, skill.level >= 7 ? 5 : 4));
   const total = rows * columns;
-  const prompt = "How many are in the array?";
-  const base = makeBase(
-    skill,
-    mode,
-    prompt,
-    prompt,
-    "Count the rows and columns, then multiply by repeated addition in your head."
-  );
-
   return {
-    ...base,
-    type: "array-counting",
+    ...buildBase(skill, mode, {
+      prompt: "How many are in the array?",
+      speech: "How many are in the array?",
+      hint: "Count rows and columns carefully.",
+      explanation: makeExplanation(
+        `${rows} rows of ${columns} make ${total}.`,
+        String(total)
+      ),
+      activityType: "array-counting"
+    }),
     choices: numberChoices(total, Math.max(0, total - 6), total + 8),
     correctChoiceId: `choice-${total}`,
     arrayData: {
@@ -592,10 +918,7 @@ const arraysQuestion = (
   };
 };
 
-export const generateQuestion = (
-  skill: SkillDefinition,
-  mode: TeachingMode
-): QuestionDefinition => {
+export const generateQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
   switch (skill.strandId) {
     case "number-recognition":
       return numberRecognitionQuestion(skill, mode);
@@ -604,7 +927,7 @@ export const generateQuestion = (
     case "comparing":
       return comparingQuestion(skill, mode);
     case "addition-subtraction":
-      return additionQuestion(skill, mode);
+      return additionSubtractionQuestion(skill, mode);
     case "place-value":
       return placeValueQuestion(skill, mode);
     case "word-problems":
@@ -629,4 +952,6 @@ export const generateQuestion = (
 };
 
 export const getSkill = (strandId: StrandId, level: number) =>
-  STRAND_MAP[strandId].levels[Math.max(0, Math.min(level - 1, STRAND_MAP[strandId].levels.length - 1))];
+  STRAND_MAP[strandId].levels[
+    Math.max(0, Math.min(level - 1, STRAND_MAP[strandId].levels.length - 1))
+  ];

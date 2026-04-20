@@ -1,14 +1,6 @@
-import type { CSSProperties } from "react";
-import { useEffect, useMemo, useState } from "react";
-import {
-  ACTIVITY_CATALOG,
-  AVATARS,
-  PROFILE_PRESETS,
-  REWARDS,
-  SESSION_LENGTHS,
-  STRANDS,
-  STRAND_MAP
-} from "../data/catalog";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AVATARS, PROFILE_PRESETS, REWARDS, SESSION_LENGTHS, STRANDS, STRAND_MAP } from "../data/catalog";
 import { EXAMPLE_COPY, MASTERY_LABELS } from "../data/rules";
 import {
   advanceAfterAnswer,
@@ -18,6 +10,8 @@ import {
   getWindowStats,
   planDailySession
 } from "../engine/progression";
+import { getUpcomingRewards, getStrandCompletion } from "../engine/rewards";
+import { useFartAudio } from "../hooks/useFartAudio";
 import { useSpeech } from "../hooks/useSpeech";
 import {
   computeReadinessLabel,
@@ -30,7 +24,12 @@ import {
 import type {
   ActiveSession,
   AnswerChoice,
+  AvatarDefinition,
+  AvatarId,
+  BuildNumberData,
   ChildProfile,
+  CoinKind,
+  DragTarget,
   ParentGateChallenge,
   PersistedState,
   PlacementProgress,
@@ -38,17 +37,35 @@ import type {
   QuestionDefinition,
   SessionLength,
   SessionTask,
+  ShapeKind,
   StrandDefinition
 } from "../types";
 
-type Screen =
-  | "home"
-  | "dashboard"
-  | "placement"
-  | "practice"
-  | "rewards"
-  | "progress"
-  | "parent";
+type Screen = "home" | "dashboard" | "placement" | "practice" | "parent";
+
+interface ReviewState {
+  scope: "placement" | "practice";
+  correct: boolean;
+  feedbackText: string;
+  feedbackSpeech: string;
+  explanationText: string;
+  explanationSpeech: string;
+  noteText?: string;
+  rewardTitles?: string[];
+  nextScreen: Screen;
+  nextPlacement?: PlacementProgress | null;
+  nextProfile?: ChildProfile;
+  nextSession?: ActiveSession | null;
+  bannerMessage: string;
+}
+
+const baseUrl = import.meta.env.BASE_URL ?? "/";
+const avatarMap = Object.fromEntries(
+  AVATARS.map((avatar) => [avatar.id, avatar])
+) as Partial<Record<AvatarId, AvatarDefinition>>;
+
+const CORRECT_FEEDBACK_SPEECH = "yeah sweet fartty butt";
+const WRONG_FEEDBACK_SPEECH = "yuck you stinky fart";
 
 const makeParentGateChallenge = (): ParentGateChallenge => {
   const left = 7 + Math.floor(Math.random() * 5);
@@ -60,6 +77,12 @@ const makeParentGateChallenge = (): ParentGateChallenge => {
   };
 };
 
+const toAssetUrl = (path: string) => {
+  if (!path) return path;
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${baseUrl}${path.replace(/^\//, "")}`;
+};
+
 const formatPercent = (value: number) => `${Math.round(value * 100)}%`;
 
 const getOverallProgress = (profile: ChildProfile) => {
@@ -67,7 +90,7 @@ const getOverallProgress = (profile: ChildProfile) => {
   const mastered = Object.values(profile.skillProgress).filter(
     (skill) => skill.status === "mastered" || skill.status === "review-needed"
   ).length;
-  return mastered / total;
+  return total === 0 ? 0 : mastered / total;
 };
 
 const getStrandSnapshot = (profile: ChildProfile, strand: StrandDefinition) => {
@@ -89,92 +112,130 @@ const getStrandSnapshot = (profile: ChildProfile, strand: StrandDefinition) => {
   };
 };
 
+const resolveAvatar = (avatarId: AvatarId) =>
+  avatarMap[avatarId] ?? AVATARS[0];
+
+const getChoiceSpeech = (question: QuestionDefinition) => {
+  if (question.choices.length === 0) return "";
+  const parts = question.choices.map((choice, index) => {
+    const badge = String.fromCharCode(65 + index);
+    return `${badge}: ${choice.speechLabel ?? choice.label}`;
+  });
+  return `Answer choices. ${parts.join(". ")}.`;
+};
+
+const getInstructionDisplay = (question: QuestionDefinition) => {
+  if (question.presentation.instructionVisibility === "visible") {
+    return {
+      title: question.prompt,
+      helper: "",
+      cue: question.presentation.promptCue
+    };
+  }
+
+  if (question.presentation.instructionVisibility === "minimal") {
+    return {
+      title: "Listen, look carefully, then choose.",
+      helper: "",
+      cue: question.presentation.promptCue
+    };
+  }
+
+  return {
+    title: "Tap the speaker, then choose the best answer.",
+    helper: "",
+    cue: question.presentation.promptCue
+  };
+};
+
+const buildReviewExplanation = (
+  question: QuestionDefinition,
+  correct: boolean,
+  suspiciousFast: boolean
+) => {
+  const parts: string[] = [];
+
+  if (!correct) {
+    parts.push(`The correct answer is ${question.explanation.correctAnswerLabel}.`);
+  }
+
+  if (suspiciousFast) {
+    parts.push("That answer was super speedy, so it does not count toward mastery.");
+  }
+
+  parts.push(question.explanation.text);
+
+  return {
+    text: parts.join(" "),
+    speech: parts.join(" ")
+  };
+};
+
+const renderAudioBadge = (index: number) => String.fromCharCode(65 + index);
+
+const MiniBadge = ({
+  text,
+  tone = "mint"
+}: {
+  text: string;
+  tone?: "mint" | "peach" | "blue";
+}) => <span className={`mini-badge mini-badge-${tone}`}>{text}</span>;
+
+const SpeakerButton = ({
+  label,
+  onSpeak,
+  small = false,
+  disabled = false
+}: {
+  label: string;
+  onSpeak: () => void;
+  small?: boolean;
+  disabled?: boolean;
+}) => (
+  <button
+    type="button"
+    className={`speaker-button ${small ? "speaker-button-small" : ""}`}
+    onClick={onSpeak}
+    aria-label={label}
+    title={label}
+    disabled={disabled}
+  >
+    🔊
+  </button>
+);
+
 const AvatarArt = ({
   avatarId,
   label,
   large = false
 }: {
-  avatarId: string;
+  avatarId: AvatarId;
   label: string;
   large?: boolean;
 }) => {
-  const size = large ? 108 : 68;
-  const faceStyle = { transformOrigin: "50% 50%" };
+  const avatar = resolveAvatar(avatarId);
+  const size = large ? 112 : 70;
 
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 120 120"
-      className={`avatar avatar-${avatarId}`}
-      aria-label={label}
-      role="img"
+    <div
+      className={`avatar-frame ${large ? "avatar-frame-large" : ""}`}
+      style={
+        {
+          "--avatar-accent": avatar.accent,
+          "--avatar-glow": avatar.glow,
+          width: `${size}px`,
+          height: `${size}px`
+        } as CSSProperties
+      }
     >
-      <defs>
-        <linearGradient id={`bg-${avatarId}`} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#fff3c1" />
-          <stop offset="100%" stopColor="#d7ffdf" />
-        </linearGradient>
-      </defs>
-      <circle cx="60" cy="60" r="56" fill={`url(#bg-${avatarId})`} />
-      {avatarId === "happy-poop" && (
-        <>
-          <path
-            d="M36 78c3-18 15-25 21-32-6-2-8-6-8-10 0-9 8-16 17-16s17 7 17 16c0 4-2 8-7 10 7 6 17 13 20 32H36Z"
-            fill="#8a5b2f"
-          />
-          <circle cx="50" cy="58" r="4.5" fill="#202224" />
-          <circle cx="70" cy="58" r="4.5" fill="#202224" />
-          <path d="M47 72c5 6 21 6 26 0" stroke="#202224" strokeWidth="4" strokeLinecap="round" />
-          <circle cx="88" cy="36" r="10" fill="#ffd86c" />
-        </>
-      )}
-      {avatarId === "fart-cloud" && (
-        <>
-          <circle cx="42" cy="60" r="18" fill="#8ef2b7" />
-          <circle cx="60" cy="54" r="21" fill="#7de5ad" />
-          <circle cx="81" cy="61" r="16" fill="#93f5c0" />
-          <circle cx="54" cy="74" r="14" fill="#72d69a" />
-          <circle cx="51" cy="58" r="4.5" fill="#214a39" />
-          <circle cx="70" cy="58" r="4.5" fill="#214a39" />
-          <path d="M50 72c5 5 16 6 22 0" stroke="#214a39" strokeWidth="4" strokeLinecap="round" />
-          <path d="M26 78c-8 3-10 8-7 12 4 4 9 3 13-1" fill="none" stroke="#214a39" strokeWidth="4" strokeLinecap="round" />
-        </>
-      )}
-      {avatarId === "toilet-roll-hero" && (
-        <>
-          <rect x="34" y="32" width="52" height="58" rx="18" fill="#e8fbff" stroke="#89b6c9" strokeWidth="5" />
-          <ellipse cx="60" cy="49" rx="18" ry="10" fill="#b1d6e3" />
-          <circle cx="50" cy="63" r="4.5" fill="#28323d" />
-          <circle cx="70" cy="63" r="4.5" fill="#28323d" />
-          <path d="M48 76c6 7 18 7 24 0" stroke="#28323d" strokeWidth="4" strokeLinecap="round" />
-          <path d="M86 50c11 2 15 8 12 17-3 8-11 10-17 8" fill="none" stroke="#89b6c9" strokeWidth="5" strokeLinecap="round" />
-        </>
-      )}
-      {avatarId === "butt-monster" && (
-        <>
-          <circle cx="44" cy="62" r="22" fill="#ffa97f" />
-          <circle cx="76" cy="62" r="22" fill="#ff9b70" />
-          <circle cx="49" cy="54" r="4.5" fill="#2f2020" />
-          <circle cx="71" cy="54" r="4.5" fill="#2f2020" />
-          <path d="M49 76c5 4 17 4 22 0" stroke="#2f2020" strokeWidth="4" strokeLinecap="round" />
-          <path d="M59 41c7-8 18-10 25-5" fill="none" stroke="#2f2020" strokeWidth="4" strokeLinecap="round" />
-        </>
-      )}
-      {avatarId === "smiling-toilet" && (
-        <>
-          <rect x="34" y="42" width="52" height="40" rx="12" fill="#a7e0ff" stroke="#427d9b" strokeWidth="5" />
-          <rect x="40" y="24" width="40" height="22" rx="10" fill="#dff6ff" stroke="#427d9b" strokeWidth="5" />
-          <circle cx="50" cy="58" r="4.5" fill="#213846" />
-          <circle cx="70" cy="58" r="4.5" fill="#213846" />
-          <path d="M49 71c5 5 17 5 22 0" stroke="#213846" strokeWidth="4" strokeLinecap="round" />
-          <rect x="50" y="82" width="20" height="16" rx="4" fill="#427d9b" />
-        </>
-      )}
-      <text x="60" y="112" textAnchor="middle" fontSize="12" fill="#1f2530" style={faceStyle}>
-        {label}
-      </text>
-    </svg>
+      <img
+        src={toAssetUrl(avatar.imageSrc)}
+        alt={label}
+        className="avatar-image"
+        width={size}
+        height={size}
+      />
+    </div>
   );
 };
 
@@ -203,30 +264,10 @@ const ProgressRing = ({ value, label }: { value: number; label: string }) => {
   );
 };
 
-const SpeakerButton = ({
-  onSpeak,
-  small = false
-}: {
-  onSpeak: () => void;
-  small?: boolean;
-}) => (
-  <button
-    type="button"
-    className={`speaker-button ${small ? "speaker-button-small" : ""}`}
-    onClick={onSpeak}
-    aria-label="Read aloud"
-  >
-    🔊
-  </button>
-);
-
-const MiniBadge = ({ text, tone = "mint" }: { text: string; tone?: "mint" | "peach" | "blue" }) => (
-  <span className={`mini-badge mini-badge-${tone}`}>{text}</span>
-);
-
 const AnalogClock = ({ hour, minute }: { hour: number; minute: number }) => {
   const minuteAngle = (minute / 60) * 360;
   const hourAngle = ((hour % 12) / 12) * 360 + minuteAngle / 12;
+
   return (
     <svg viewBox="0 0 100 100" className="clock-face" role="img" aria-label={`${hour}:${minute}`}>
       <circle cx="50" cy="50" r="42" fill="#fff8d8" stroke="#374250" strokeWidth="4" />
@@ -261,8 +302,146 @@ const AnalogClock = ({ hour, minute }: { hour: number; minute: number }) => {
   );
 };
 
-const QuestionVisual = ({ question }: { question: QuestionDefinition }) => {
-  if (question.type === "graph-reading" && question.graph) {
+const ShapePreview = ({ shape }: { shape: ShapeKind }) => {
+  if (shape === "cube") {
+    return (
+      <svg viewBox="0 0 100 100" className="shape-svg" aria-hidden="true">
+        <polygon points="30,30 60,20 82,35 52,45" fill="#8fd1ff" />
+        <polygon points="30,30 30,65 52,80 52,45" fill="#7ec5f3" />
+        <polygon points="52,45 82,35 82,70 52,80" fill="#5ca7d9" />
+      </svg>
+    );
+  }
+
+  if (shape === "sphere") {
+    return (
+      <svg viewBox="0 0 100 100" className="shape-svg" aria-hidden="true">
+        <defs>
+          <radialGradient id="sphere-fill" cx="35%" cy="35%">
+            <stop offset="0%" stopColor="#ffffff" />
+            <stop offset="100%" stopColor="#8fd1ff" />
+          </radialGradient>
+        </defs>
+        <circle cx="50" cy="50" r="30" fill="url(#sphere-fill)" stroke="#296e93" strokeWidth="4" />
+      </svg>
+    );
+  }
+
+  if (shape === "cylinder") {
+    return (
+      <svg viewBox="0 0 100 100" className="shape-svg" aria-hidden="true">
+        <ellipse cx="50" cy="28" rx="26" ry="12" fill="#a0e3ff" stroke="#296e93" strokeWidth="4" />
+        <rect x="24" y="28" width="52" height="40" fill="#7dc6ff" stroke="#296e93" strokeWidth="4" />
+        <ellipse cx="50" cy="68" rx="26" ry="12" fill="#72c0f5" stroke="#296e93" strokeWidth="4" />
+      </svg>
+    );
+  }
+
+  if (shape === "cone") {
+    return (
+      <svg viewBox="0 0 100 100" className="shape-svg" aria-hidden="true">
+        <polygon points="50,18 24,72 76,72" fill="#ffbc67" stroke="#a55f17" strokeWidth="4" />
+        <ellipse cx="50" cy="72" rx="26" ry="10" fill="#ffd8a1" stroke="#a55f17" strokeWidth="4" />
+      </svg>
+    );
+  }
+
+  if (shape === "circle") {
+    return (
+      <svg viewBox="0 0 100 100" className="shape-svg" aria-hidden="true">
+        <circle cx="50" cy="50" r="28" fill="#8fd1ff" stroke="#296e93" strokeWidth="5" />
+      </svg>
+    );
+  }
+
+  if (shape === "square") {
+    return (
+      <svg viewBox="0 0 100 100" className="shape-svg" aria-hidden="true">
+        <rect x="24" y="24" width="52" height="52" fill="#ffd06c" stroke="#a55f17" strokeWidth="5" />
+      </svg>
+    );
+  }
+
+  if (shape === "triangle") {
+    return (
+      <svg viewBox="0 0 100 100" className="shape-svg" aria-hidden="true">
+        <polygon points="50,20 20,76 80,76" fill="#7ed89f" stroke="#2e8a58" strokeWidth="5" />
+      </svg>
+    );
+  }
+
+  if (shape === "rectangle") {
+    return (
+      <svg viewBox="0 0 100 100" className="shape-svg" aria-hidden="true">
+        <rect x="16" y="30" width="68" height="40" fill="#ff9db2" stroke="#a4425a" strokeWidth="5" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 100 100" className="shape-svg" aria-hidden="true">
+      <polygon
+        points="50,18 76,34 76,66 50,82 24,66 24,34"
+        fill="#d5b4ff"
+        stroke="#6b4da0"
+        strokeWidth="5"
+      />
+    </svg>
+  );
+};
+
+const coinTheme: Record<CoinKind, { fill: string; stroke: string; size: number; cents: string }> = {
+  penny: { fill: "#cb7a42", stroke: "#844824", size: 74, cents: "1¢" },
+  nickel: { fill: "#d9dadd", stroke: "#7a7f89", size: 78, cents: "5¢" },
+  dime: { fill: "#eef1f7", stroke: "#8f96a5", size: 66, cents: "10¢" },
+  quarter: { fill: "#e6ecf8", stroke: "#7d889f", size: 82, cents: "25¢" },
+  dollar: { fill: "#e6d07a", stroke: "#938041", size: 88, cents: "$1" }
+};
+
+const CoinPreview = ({ kind }: { kind: CoinKind }) => {
+  const theme = coinTheme[kind];
+  return (
+    <div
+      className="coin-token"
+      style={
+        {
+          "--coin-fill": theme.fill,
+          "--coin-stroke": theme.stroke,
+          width: `${theme.size}px`,
+          height: `${theme.size}px`
+        } as CSSProperties
+      }
+    >
+      <span>{theme.cents}</span>
+    </div>
+  );
+};
+
+const FractionPreview = ({
+  partition
+}: {
+  partition: NonNullable<AnswerChoice["partition"]>;
+}) => {
+  const unequalWidths =
+    partition.equal || partition.parts !== 2
+      ? Array.from({ length: partition.parts }, () => `${100 / partition.parts}%`)
+      : ["35%", "65%"];
+
+  return (
+    <div className={`fraction-preview fraction-${partition.shape}`}>
+      {unequalWidths.map((width, index) => (
+        <span
+          key={`${partition.shape}-${index}`}
+          className={index < (partition.highlightedParts ?? 0) ? "fraction-part-highlight" : ""}
+          style={{ width }}
+        />
+      ))}
+    </div>
+  );
+};
+
+const QuestionSupportVisual = ({ question }: { question: QuestionDefinition }) => {
+  if (question.graph) {
     return (
       <div className="graph-card">
         {question.graph.bars.map((bar) => (
@@ -278,64 +457,7 @@ const QuestionVisual = ({ question }: { question: QuestionDefinition }) => {
     );
   }
 
-  if (question.type === "clock-choice" && question.clockChoices) {
-    return null;
-  }
-
-  if (question.type === "fill-ten-frame" && question.tenFrame) {
-    return (
-      <div className="ten-frame">
-        {Array.from({ length: 10 }, (_, index) => (
-          <div key={index} className={`ten-slot ${index < question.tenFrame!.filled ? "filled" : ""}`}>
-            {index < question.tenFrame!.filled ? "🚽" : ""}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (question.type === "build-a-number" && question.buildNumber) {
-    return (
-      <div className="build-number-card">
-        <div><strong>Hundreds:</strong> {question.buildNumber.hundreds}</div>
-        <div><strong>Tens:</strong> {question.buildNumber.tens}</div>
-        <div><strong>Ones:</strong> {question.buildNumber.ones}</div>
-      </div>
-    );
-  }
-
-  if (question.type === "array-counting" && question.arrayData) {
-    return (
-      <div className="array-grid" style={{ gridTemplateColumns: `repeat(${question.arrayData.columns}, 1fr)` }}>
-        {Array.from({ length: question.arrayData.target }, (_, index) => (
-          <span key={index} className="array-token">🧻</span>
-        ))}
-      </div>
-    );
-  }
-
-  if (question.type === "number-line-tap" && question.numberLine) {
-    return (
-      <div className="number-line-card">
-        <div className="number-line-track">
-          {Array.from(
-            { length: Math.min(8, question.numberLine.end - question.numberLine.start + 1) },
-            (_, index) => {
-              const value = question.numberLine!.start + index;
-              return (
-                <div key={value} className={`number-line-stop ${value === question.numberLine!.target ? "target" : ""}`}>
-                  <span />
-                  <em>{value}</em>
-                </div>
-              );
-            }
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  if (question.type === "story-scene" && question.story) {
+  if (question.story) {
     return (
       <div className="story-card">
         <strong>{question.story.scene}</strong>
@@ -344,9 +466,36 @@ const QuestionVisual = ({ question }: { question: QuestionDefinition }) => {
     );
   }
 
+  if (question.coins) {
+    return (
+      <div className="coin-strip card-surface">
+        {question.coins.map((coin) => (
+          <div key={coin.id} className="coin-strip-item">
+            <CoinPreview kind={coin.kind} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (question.arrayData) {
+    return (
+      <div
+        className="array-grid"
+        style={{ gridTemplateColumns: `repeat(${question.arrayData.columns}, minmax(0, 1fr))` }}
+      >
+        {Array.from({ length: question.arrayData.target }, (_, index) => (
+          <span key={index} className="array-token">
+            🧻
+          </span>
+        ))}
+      </div>
+    );
+  }
+
   if (question.groups) {
     return (
-      <div className="group-visuals">
+      <div className={`group-visuals ${question.presentation.layout === "left-right" ? "group-visuals-left-right" : ""}`}>
         {question.groups.map((group) => (
           <div key={group.id} className="group-card">
             <strong>{group.label}</strong>
@@ -364,63 +513,703 @@ const QuestionVisual = ({ question }: { question: QuestionDefinition }) => {
     );
   }
 
+  return null;
+};
+
+const ChoiceCardBody = ({
+  question,
+  choice,
+  index
+}: {
+  question: QuestionDefinition;
+  choice: AnswerChoice;
+  index: number;
+}) => {
+  const audioOnly = question.presentation.choiceVisibility === "audio-only";
+
+  if (audioOnly) {
+    return (
+      <div className="audio-choice-body">
+        <strong>{renderAudioBadge(index)}</strong>
+      </div>
+    );
+  }
+
+  if (question.type === "clock-choice" && question.clockChoices) {
+    const clock = question.clockChoices.find((item) => item.label === choice.value);
+    if (clock) {
+      return (
+        <div className="clock-card">
+          <AnalogClock hour={clock.targetHour} minute={clock.targetMinute} />
+        </div>
+      );
+    }
+  }
+
+  if (choice.renderKind === "shape" && choice.shape) {
+    return (
+      <div className="choice-visual-stack">
+        <ShapePreview shape={choice.shape} />
+        <span>{choice.label}</span>
+      </div>
+    );
+  }
+
+  if (choice.renderKind === "coin" && choice.coin) {
+    return (
+      <div className="choice-visual-stack">
+        <CoinPreview kind={choice.coin} />
+      </div>
+    );
+  }
+
+  if (choice.renderKind === "fraction" && choice.partition) {
+    return (
+      <div className="choice-visual-stack">
+        <FractionPreview partition={choice.partition} />
+        <span>{choice.label}</span>
+      </div>
+    );
+  }
+
+  if (choice.renderKind === "position") {
+    return (
+      <div className="choice-visual-stack">
+        <span className="position-arrow">{choice.label === "Left" ? "⬅︎" : choice.label === "Right" ? "➡︎" : "↔︎"}</span>
+        <span>{choice.label}</span>
+      </div>
+    );
+  }
+
+  if (choice.renderKind === "number") {
+    return <strong className="choice-number">{choice.label}</strong>;
+  }
+
+  return <strong className="choice-label">{choice.label}</strong>;
+};
+
+const ChoiceGridActivity = ({
+  question,
+  onSubmit,
+  disabled
+}: {
+  question: QuestionDefinition;
+  onSubmit: (choiceId: string) => void;
+  disabled: boolean;
+}) => {
+  const layoutClass =
+    question.presentation.layout === "left-right"
+      ? "choice-grid-left-right"
+      : question.presentation.layout === "top-bottom"
+        ? "choice-grid-top-bottom"
+        : question.presentation.layout === "clock-grid" || question.type === "clock-choice"
+          ? "choice-grid-clock"
+          : "choice-grid-standard";
+
   return (
-    <div className="activity-card">
-      <strong>{question.targetLabel ?? "Pick the best answer"}</strong>
-      <p>{ACTIVITY_CATALOG.find((game) => game.type === question.type)?.example}</p>
+    <div className={`choice-grid ${layoutClass}`}>
+      {question.choices.map((choice, index) => (
+        <button
+          key={choice.id}
+          type="button"
+          className="choice-button"
+          onClick={() => onSubmit(choice.id)}
+          disabled={disabled}
+        >
+          <ChoiceCardBody question={question} choice={choice} index={index} />
+        </button>
+      ))}
     </div>
   );
 };
 
+const CountTapActivity = ({
+  question,
+  onSubmit,
+  disabled
+}: {
+  question: QuestionDefinition;
+  onSubmit: (choiceId: string) => void;
+  disabled: boolean;
+}) => {
+  const total = question.countTap?.total ?? 0;
+  const [tapped, setTapped] = useState<boolean[]>(() => Array.from({ length: total }, () => false));
+  const selectedCount = tapped.filter(Boolean).length;
+
+  useEffect(() => {
+    setTapped(Array.from({ length: total }, () => false));
+  }, [question.id, total]);
+
+  return (
+    <div className="interactive-stack">
+      <div className="count-tap-grid">
+        {tapped.map((selected, index) => (
+          <button
+            key={`${question.id}-${index}`}
+            type="button"
+            className={`count-tap-token ${selected ? "count-tap-token-selected" : ""}`}
+            onClick={() =>
+              setTapped((current) => current.map((value, currentIndex) => (currentIndex === index ? !value : value)))
+            }
+            disabled={disabled}
+          >
+            <span>{question.countTap?.token ?? "💩"}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="interactive-footer">
+        <strong>Counted: {selectedCount}</strong>
+        <div className="row-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setTapped(Array.from({ length: total }, () => false))}
+            disabled={disabled}
+          >
+            Reset
+          </button>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => onSubmit(`count-${selectedCount}`)}
+            disabled={disabled}
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const FillTenFrameActivity = ({
+  question,
+  onSubmit,
+  disabled
+}: {
+  question: QuestionDefinition;
+  onSubmit: (choiceId: string) => void;
+  disabled: boolean;
+}) => {
+  const baseFilled = question.tenFrame?.filled ?? 0;
+  const [extraFilled, setExtraFilled] = useState<boolean[]>(() => Array.from({ length: 10 - baseFilled }, () => false));
+
+  useEffect(() => {
+    setExtraFilled(Array.from({ length: 10 - baseFilled }, () => false));
+  }, [question.id, baseFilled]);
+
+  const totalFilled = baseFilled + extraFilled.filter(Boolean).length;
+
+  return (
+    <div className="interactive-stack">
+      <div className="ten-frame">
+        {Array.from({ length: 10 }, (_, index) => {
+          const locked = index < baseFilled;
+          const selectableIndex = index - baseFilled;
+          const selected = locked || extraFilled[selectableIndex];
+          return (
+            <button
+              key={`${question.id}-slot-${index}`}
+              type="button"
+              className={`ten-slot ${selected ? "filled" : ""} ${locked ? "ten-slot-locked" : ""}`}
+              disabled={disabled || locked}
+              onClick={() =>
+                setExtraFilled((current) =>
+                  current.map((value, currentIndex) =>
+                    currentIndex === selectableIndex ? !value : value
+                  )
+                )
+              }
+            >
+              {selected ? "🚽" : ""}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="interactive-footer">
+        <strong>Full stalls: {totalFilled}</strong>
+        <div className="row-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setExtraFilled(Array.from({ length: 10 - baseFilled }, () => false))}
+            disabled={disabled}
+          >
+            Reset
+          </button>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => onSubmit(`fill-${totalFilled}`)}
+            disabled={disabled}
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const NumberStepper = ({
+  label,
+  value,
+  max,
+  onChange,
+  disabled
+}: {
+  label: string;
+  value: number;
+  max: number;
+  onChange: (next: number) => void;
+  disabled: boolean;
+}) => (
+  <div className="stepper-card">
+    <strong>{label}</strong>
+    <div className="stepper-controls">
+      <button type="button" className="secondary-button stepper-button" onClick={() => onChange(Math.max(0, value - 1))} disabled={disabled}>
+        −
+      </button>
+      <span>{value}</span>
+      <button type="button" className="secondary-button stepper-button" onClick={() => onChange(Math.min(max, value + 1))} disabled={disabled}>
+        +
+      </button>
+    </div>
+  </div>
+);
+
+const BuildNumberActivity = ({
+  question,
+  onSubmit,
+  disabled
+}: {
+  question: QuestionDefinition;
+  onSubmit: (choiceId: string) => void;
+  disabled: boolean;
+}) => {
+  const target = question.buildNumber as BuildNumberData | undefined;
+  const [hundreds, setHundreds] = useState(0);
+  const [tens, setTens] = useState(0);
+  const [ones, setOnes] = useState(0);
+
+  useEffect(() => {
+    setHundreds(0);
+    setTens(0);
+    setOnes(0);
+  }, [question.id]);
+
+  const total = hundreds * 100 + tens * 10 + ones;
+
+  return (
+    <div className="interactive-stack">
+      <div className="build-target-banner">
+        <strong>Target</strong>
+        <span>{target?.target ?? 0}</span>
+      </div>
+      <div className="build-number-grid">
+        {target && target.hundreds > 0 ? (
+          <NumberStepper label="Hundreds" value={hundreds} max={9} onChange={setHundreds} disabled={disabled} />
+        ) : null}
+        <NumberStepper label="Tens" value={tens} max={9} onChange={setTens} disabled={disabled} />
+        <NumberStepper label="Ones" value={ones} max={9} onChange={setOnes} disabled={disabled} />
+      </div>
+
+      <div className="interactive-footer">
+        <strong>You built: {total}</strong>
+        <div className="row-actions">
+          <button type="button" className="secondary-button" onClick={() => {
+            setHundreds(0);
+            setTens(0);
+            setOnes(0);
+          }} disabled={disabled}>
+            Reset
+          </button>
+          <button type="button" className="primary-button" onClick={() => onSubmit(`choice-${total}`)} disabled={disabled}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const NumberLineActivity = ({
+  question,
+  onSubmit,
+  disabled
+}: {
+  question: QuestionDefinition;
+  onSubmit: (choiceId: string) => void;
+  disabled: boolean;
+}) => (
+  <div className="interactive-stack">
+    <div className="number-line-card">
+      <div className="number-line-track">
+        {question.choices.map((choice) => (
+          <button
+            key={choice.id}
+            type="button"
+            className="number-line-stop"
+            onClick={() => onSubmit(choice.id)}
+            disabled={disabled}
+          >
+            <span />
+            <em>{choice.label}</em>
+          </button>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+const DragToken = ({
+  question,
+  choice,
+  index
+}: {
+  question: QuestionDefinition;
+  choice: AnswerChoice;
+  index: number;
+}) => (
+  <div className="drag-token-body">
+    <ChoiceCardBody question={question} choice={choice} index={index} />
+  </div>
+);
+
+const DragActivity = ({
+  question,
+  onSubmit,
+  disabled
+}: {
+  question: QuestionDefinition;
+  onSubmit: (choiceId: string) => void;
+  disabled: boolean;
+}) => {
+  const drag = question.drag;
+  const [placedChoiceId, setPlacedChoiceId] = useState<string | null>(null);
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  const [draggingChoiceId, setDraggingChoiceId] = useState<string | null>(null);
+  const [dragPoint, setDragPoint] = useState<{ x: number; y: number } | null>(null);
+  const zoneRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  useEffect(() => {
+    setPlacedChoiceId(null);
+    setSelectedZoneId(null);
+    setDraggingChoiceId(null);
+    setDragPoint(null);
+  }, [question.id]);
+
+  useEffect(() => {
+    if (!draggingChoiceId) return undefined;
+
+    const handleMove = (event: PointerEvent) => {
+      setDragPoint({ x: event.clientX, y: event.clientY });
+    };
+
+    const handleUp = (event: PointerEvent) => {
+      let droppedOn: DragTarget | undefined;
+      for (const target of drag?.targets ?? []) {
+        const element = zoneRefs.current[target.id];
+        if (!element) continue;
+        const rect = element.getBoundingClientRect();
+        if (
+          event.clientX >= rect.left &&
+          event.clientX <= rect.right &&
+          event.clientY >= rect.top &&
+          event.clientY <= rect.bottom
+        ) {
+          droppedOn = target;
+          break;
+        }
+      }
+
+      if (droppedOn) {
+        if (drag?.mode === "choice-to-target") {
+          setPlacedChoiceId(draggingChoiceId);
+        } else {
+          setSelectedZoneId(droppedOn.id);
+        }
+      }
+
+      setDraggingChoiceId(null);
+      setDragPoint(null);
+    };
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+  }, [drag, draggingChoiceId]);
+
+  if (!drag) {
+    return <ChoiceGridActivity question={question} onSubmit={onSubmit} disabled={disabled} />;
+  }
+
+  const draggableChoices =
+    drag.mode === "choice-to-target"
+      ? question.choices.filter((choice) => choice.id !== placedChoiceId)
+      : drag.promptItem
+        ? [drag.promptItem]
+        : [];
+
+  const placedChoice =
+    drag.mode === "choice-to-target"
+      ? question.choices.find((choice) => choice.id === placedChoiceId)
+      : drag.promptItem;
+
+  return (
+    <div className="interactive-stack">
+      <div className="drag-layout">
+        <div className="drag-bank">
+          {draggableChoices.map((choice, index) => (
+            <button
+              key={choice.id}
+              type="button"
+              className={`drag-token ${draggingChoiceId === choice.id ? "drag-token-hidden" : ""}`}
+              disabled={disabled}
+              onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
+                if (disabled) return;
+                event.preventDefault();
+                setDraggingChoiceId(choice.id);
+                setDragPoint({ x: event.clientX, y: event.clientY });
+              }}
+            >
+              <DragToken question={question} choice={choice} index={index} />
+            </button>
+          ))}
+        </div>
+
+        <div
+          className={`drag-targets ${question.presentation.layout === "left-right" ? "drag-targets-left-right" : ""}`}
+        >
+          {drag.targets.map((target) => {
+            const isSelected =
+              drag.mode === "choice-to-target"
+                ? Boolean(placedChoice)
+                : selectedZoneId === target.id;
+            return (
+              <div
+                key={target.id}
+                ref={(element) => {
+                  zoneRefs.current[target.id] = element;
+                }}
+                className={`drag-target ${isSelected ? "drag-target-filled" : ""}`}
+              >
+                <strong>{target.label}</strong>
+                {drag.mode === "choice-to-target" && placedChoice ? (
+                  <DragToken question={question} choice={placedChoice} index={0} />
+                ) : null}
+                {drag.mode === "prompt-to-zones" && selectedZoneId === target.id && drag.promptItem ? (
+                  <DragToken question={question} choice={drag.promptItem} index={0} />
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="interactive-footer">
+        <div className="row-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => {
+              setPlacedChoiceId(null);
+              setSelectedZoneId(null);
+            }}
+            disabled={disabled}
+          >
+            Reset
+          </button>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() =>
+              onSubmit(
+                drag.mode === "choice-to-target"
+                  ? placedChoiceId ?? ""
+                  : selectedZoneId ?? ""
+              )
+            }
+            disabled={disabled || (drag.mode === "choice-to-target" ? !placedChoiceId : !selectedZoneId)}
+          >
+            Check answer
+          </button>
+        </div>
+      </div>
+
+      {draggingChoiceId && dragPoint ? (
+        <div
+          className="drag-preview"
+          style={{ left: `${dragPoint.x}px`, top: `${dragPoint.y}px` }}
+        >
+          <DragToken
+            question={question}
+            choice={
+              question.choices.find((choice) => choice.id === draggingChoiceId) ??
+              drag.promptItem ??
+              question.choices[0]
+            }
+            index={0}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+const TaskInteraction = ({
+  question,
+  onSubmit,
+  disabled
+}: {
+  question: QuestionDefinition;
+  onSubmit: (choiceId: string) => void;
+  disabled: boolean;
+}) => {
+  if (question.type === "count-and-tap" && question.countTap) {
+    return <CountTapActivity question={question} onSubmit={onSubmit} disabled={disabled} />;
+  }
+
+  if (question.type === "fill-ten-frame" && question.tenFrame) {
+    return <FillTenFrameActivity question={question} onSubmit={onSubmit} disabled={disabled} />;
+  }
+
+  if (question.type === "build-a-number" && question.buildNumber) {
+    return <BuildNumberActivity question={question} onSubmit={onSubmit} disabled={disabled} />;
+  }
+
+  if (question.type === "number-line-tap" && question.numberLine) {
+    return <NumberLineActivity question={question} onSubmit={onSubmit} disabled={disabled} />;
+  }
+
+  if (question.drag) {
+    return <DragActivity question={question} onSubmit={onSubmit} disabled={disabled} />;
+  }
+
+  return <ChoiceGridActivity question={question} onSubmit={onSubmit} disabled={disabled} />;
+};
+
+const ReviewCard = ({
+  reviewState,
+  ttsEnabled,
+  onSpeakFeedback,
+  onSpeakExplanation,
+  onContinue
+}: {
+  reviewState: ReviewState;
+  ttsEnabled: boolean;
+  onSpeakFeedback: () => void;
+  onSpeakExplanation: () => void;
+  onContinue: () => void;
+}) => (
+  <div className={`review-card ${reviewState.correct ? "review-card-correct" : "review-card-wrong"}`}>
+    <div className="review-header">
+      <MiniBadge text={reviewState.correct ? "Correct" : "Try again"} tone={reviewState.correct ? "mint" : "peach"} />
+      <h3>{reviewState.feedbackText}</h3>
+    </div>
+    <p>{reviewState.explanationText}</p>
+    {reviewState.noteText ? <div className="hint-banner">{reviewState.noteText}</div> : null}
+    {reviewState.rewardTitles && reviewState.rewardTitles.length > 0 ? (
+      <div className="reward-pill-row">
+        {reviewState.rewardTitles.map((title) => (
+          <span key={title} className="reward-pill">
+            {title}
+          </span>
+        ))}
+      </div>
+    ) : null}
+    <div className="audio-toolbar">
+      <SpeakerButton label="Read feedback" onSpeak={onSpeakFeedback} small disabled={!ttsEnabled} />
+      <SpeakerButton label="Read explanation" onSpeak={onSpeakExplanation} small disabled={!ttsEnabled} />
+    </div>
+    <button type="button" className="primary-button" onClick={onContinue}>
+      Continue
+    </button>
+  </div>
+);
+
 const TaskScreen = ({
   task,
-  onAnswer,
-  onUseHint,
   hintVisible,
-  onCompleteExample,
   revealExample,
+  reviewState,
+  ttsEnabled,
+  onUseHint,
   onRevealExample,
-  onSpeak
+  onCompleteExample,
+  onSubmitAnswer,
+  onSpeakInstruction,
+  onSpeakChoices,
+  onSpeakHint,
+  onSpeakFeedback,
+  onSpeakExplanation,
+  onContinue
 }: {
   task: SessionTask;
-  onAnswer: (choiceId: string) => void;
-  onUseHint: () => void;
   hintVisible: boolean;
-  onCompleteExample: () => void;
   revealExample: boolean;
+  reviewState: ReviewState | null;
+  ttsEnabled: boolean;
+  onUseHint: () => void;
   onRevealExample: () => void;
-  onSpeak: () => void;
+  onCompleteExample: () => void;
+  onSubmitAnswer: (choiceId: string) => void;
+  onSpeakInstruction: () => void;
+  onSpeakChoices: () => void;
+  onSpeakHint: () => void;
+  onSpeakFeedback: () => void;
+  onSpeakExplanation: () => void;
+  onContinue: () => void;
 }) => {
   const stageTitle =
     task.mode === "placement"
       ? "Placement"
       : task.mode === "example"
-      ? "Example Mode"
-      : task.isCheckpoint
-        ? "Checkpoint"
-        : task.mode === "practice"
-          ? "Practice Mode"
-          : "Mastery Mode";
+        ? "Example Mode"
+        : task.isCheckpoint
+          ? "Checkpoint"
+          : task.mode === "practice"
+            ? "Practice Mode"
+            : "Mastery Mode";
+  const instruction = getInstructionDisplay(task.question);
+  const supportsHints = task.mode === "practice";
 
   return (
     <section className="task-screen card">
       <header className="task-header">
         <div>
-          <MiniBadge text={stageTitle} tone={task.isCheckpoint ? "peach" : "mint"} />
-          <h2>{task.question.prompt}</h2>
+          <div className="task-badge-row">
+            <MiniBadge text={stageTitle} tone={task.isCheckpoint ? "peach" : "mint"} />
+            {task.focusLabel ? <MiniBadge text={task.focusLabel} tone="blue" /> : null}
+          </div>
+          <h2>{instruction.title}</h2>
+          {instruction.cue ? <div className="prompt-cue">{instruction.cue}</div> : null}
         </div>
-        <SpeakerButton onSpeak={onSpeak} />
+        <SpeakerButton label="Read instruction" onSpeak={onSpeakInstruction} disabled={!ttsEnabled} />
       </header>
 
-      <p className="task-support">{task.question.supportText}</p>
+      <div className="audio-toolbar">
+        {task.question.choices.length > 0 ? (
+          <SpeakerButton label="Read answer choices" onSpeak={onSpeakChoices} small disabled={!ttsEnabled} />
+        ) : null}
+        {supportsHints ? (
+          <SpeakerButton label="Read hint" onSpeak={onSpeakHint} small disabled={!ttsEnabled} />
+        ) : null}
+      </div>
 
-      <QuestionVisual question={task.question} />
+      <p className="task-support">{task.question.supportText}</p>
 
       {task.mode === "example" ? (
         <div className="example-controls">
           {!revealExample ? (
             <button type="button" className="primary-button" onClick={onRevealExample}>
-              Show me a silly example
+              Show me an example
             </button>
           ) : (
             <>
@@ -429,56 +1218,56 @@ const TaskScreen = ({
                 <span>{task.question.hint}</span>
               </div>
               <button type="button" className="primary-button" onClick={onCompleteExample}>
-                I saw it. Let&apos;s try.
+                I saw it. Let&apos;s go on.
               </button>
             </>
           )}
         </div>
+      ) : reviewState ? (
+        <ReviewCard
+          reviewState={reviewState}
+          ttsEnabled={ttsEnabled}
+          onSpeakFeedback={onSpeakFeedback}
+          onSpeakExplanation={onSpeakExplanation}
+          onContinue={onContinue}
+        />
       ) : (
         <>
-          {task.mode === "practice" && (
+          {supportsHints ? (
             <div className="hint-row">
               <button type="button" className="secondary-button" onClick={onUseHint}>
                 Need a hint?
               </button>
-              {hintVisible && <div className="hint-banner">{task.question.hint}</div>}
+              {hintVisible ? <div className="hint-banner">{task.question.hint}</div> : null}
             </div>
-          )}
+          ) : null}
 
-          <div className="choice-grid">
-            {task.question.choices.map((choice) => (
-              <button
-                key={choice.id}
-                type="button"
-                className="choice-button"
-                onClick={() => onAnswer(choice.id)}
-              >
-                {task.question.type === "clock-choice" ? (
-                  <>
-                    <AnalogClock
-                      hour={Number(String(choice.value).split(":")[0])}
-                      minute={Number(String(choice.value).split(":")[1])}
-                    />
-                    <span>{choice.label}</span>
-                  </>
-                ) : (
-                  <span>{choice.label}</span>
-                )}
-              </button>
-            ))}
-          </div>
+          <QuestionSupportVisual question={task.question} />
+          <TaskInteraction question={task.question} onSubmit={onSubmitAnswer} disabled={Boolean(reviewState)} />
         </>
       )}
     </section>
   );
 };
 
+const RecentSessionList = ({ profile }: { profile: ChildProfile }) => (
+  <div className="recent-session-list">
+    {profile.recentSessions.slice(0, 3).map((recent) => (
+      <div key={recent.id} className="recent-session-row">
+        <strong>{recent.durationMinutes} min</strong>
+        <span>{recent.firstTryCorrect}/{recent.itemsCompleted} first-try correct</span>
+      </div>
+    ))}
+    {profile.recentSessions.length === 0 ? <small>No finished sessions yet.</small> : null}
+  </div>
+);
+
 export default function App() {
   const [persistedState, setPersistedState] = useState<PersistedState>(() => loadState());
   const [screen, setScreen] = useState<Screen>("home");
   const [activeChildId, setActiveChildId] = useState<ProfileId | null>(null);
   const [nameInput, setNameInput] = useState("");
-  const [feedback, setFeedback] = useState<string>("");
+  const [feedback, setFeedback] = useState("");
   const [placement, setPlacement] = useState<PlacementProgress | null>(null);
   const [session, setSession] = useState<ActiveSession | null>(null);
   const [taskShownAt, setTaskShownAt] = useState(Date.now());
@@ -488,14 +1277,38 @@ export default function App() {
   const [parentGateOpen, setParentGateOpen] = useState(false);
   const [parentGateChallenge, setParentGateChallenge] = useState(makeParentGateChallenge());
   const [parentGateInput, setParentGateInput] = useState("");
-  const speech = useSpeech(
-    persistedState.settings.ttsEnabled,
-    persistedState.settings.ttsRate
-  );
+  const [reviewState, setReviewState] = useState<ReviewState | null>(null);
+  const answerLockedRef = useRef(false);
+
+  const speech = useSpeech({
+    enabled: persistedState.settings.ttsEnabled,
+    rate: persistedState.settings.ttsRate,
+    selectedVoiceURI: persistedState.settings.selectedVoiceURI
+  });
+  const fartAudio = useFartAudio();
 
   useEffect(() => {
     saveState(persistedState);
   }, [persistedState]);
+
+  useEffect(() => {
+    if (!speech.supported || !speech.resolvedVoiceURI) return;
+
+    const selected = persistedState.settings.selectedVoiceURI;
+    const selectedStillExists = selected
+      ? speech.voices.some((voice) => voice.voiceURI === selected)
+      : false;
+
+    if (!selected || !selectedStillExists) {
+      setPersistedState((current) => ({
+        ...current,
+        settings: {
+          ...current.settings,
+          selectedVoiceURI: speech.resolvedVoiceURI
+        }
+      }));
+    }
+  }, [persistedState.settings.selectedVoiceURI, speech.resolvedVoiceURI, speech.supported, speech.voices]);
 
   const activeChild = activeChildId ? persistedState.profiles[activeChildId] : null;
   const currentTask = session ? session.tasks[session.currentIndex] : null;
@@ -505,6 +1318,8 @@ export default function App() {
     setTaskShownAt(Date.now());
     setHintVisible(false);
     setRevealExample(false);
+    setReviewState(null);
+    answerLockedRef.current = false;
   }, [currentTask?.question.id, currentPlacementProbe?.question.id]);
 
   const updateProfile = (profile: ChildProfile) => {
@@ -517,10 +1332,28 @@ export default function App() {
     }));
   };
 
+  const updateSettings = (updater: (current: PersistedState["settings"]) => PersistedState["settings"]) => {
+    setPersistedState((current) => ({
+      ...current,
+      settings: updater(current.settings)
+    }));
+  };
+
+  const playAnswerFeedback = (correct: boolean) => {
+    fartAudio.play();
+    speech.speak({
+      channel: "feedback",
+      text: correct ? CORRECT_FEEDBACK_SPEECH : WRONG_FEEDBACK_SPEECH,
+      delayMs: 110
+    });
+  };
+
   const jumpHome = () => {
+    speech.stop();
     setScreen("home");
     setPlacement(null);
     setSession(null);
+    setReviewState(null);
     setShowAvatarPicker(false);
     setFeedback("");
   };
@@ -531,9 +1364,12 @@ export default function App() {
     const profile = persistedState.profiles[profileId];
     if (!profile.placementDone) {
       setPlacement(buildPlacementProgress());
+      setSession(null);
       setScreen("placement");
       setFeedback("Warm-up time. We are checking each strand a little bit.");
     } else {
+      setPlacement(null);
+      setSession(null);
       setScreen("dashboard");
       setFeedback("");
     }
@@ -545,12 +1381,38 @@ export default function App() {
       setFeedback(`"${normalizeNameInput(nameInput)}" does not match Ély or Ira.`);
       return;
     }
+
     setNameInput("");
     openChild(profileId);
   };
 
+  const continueFromReview = () => {
+    if (!reviewState) return;
+
+    if (reviewState.scope === "placement") {
+      if (reviewState.nextProfile) {
+        updateProfile(reviewState.nextProfile);
+      }
+      setPlacement(reviewState.nextPlacement ?? null);
+    } else {
+      if (reviewState.nextProfile) {
+        updateProfile(reviewState.nextProfile);
+      }
+      setSession(reviewState.nextSession ?? null);
+    }
+
+    setReviewState(null);
+    answerLockedRef.current = false;
+    setFeedback(reviewState.bannerMessage);
+    setScreen(reviewState.nextScreen);
+  };
+
   const handlePlacementAnswer = (choiceId: string) => {
-    if (!activeChild || !placement || !currentPlacementProbe) return;
+    if (!activeChild || !placement || !currentPlacementProbe || reviewState || answerLockedRef.current) {
+      return;
+    }
+
+    answerLockedRef.current = true;
     const responseTimeMs = Date.now() - taskShownAt;
     const correct = choiceId === currentPlacementProbe.question.correctChoiceId;
     const suspiciousFast = responseTimeMs < currentPlacementProbe.question.minResponseMs;
@@ -566,44 +1428,64 @@ export default function App() {
       }
     };
 
-    if (correct) {
-      setFeedback(
-        suspiciousFast
-          ? "That was a turbo tap. Nice job, but it will not count for placement."
-          : "Nice thinking."
-      );
-      speech.speak("Nice thinking.");
-    } else {
-      setFeedback("That one was tricky. The app will start gently.");
-      speech.speak("That one was tricky. The app will start gently.");
-    }
+    const explanation = buildReviewExplanation(currentPlacementProbe.question, correct, suspiciousFast);
+    playAnswerFeedback(correct);
 
     if (nextPlacement.probeIndex >= nextPlacement.probes.length) {
       const placedProfile = applyPlacementResults(activeChild, nextPlacement.scoresByStrand);
-      updateProfile(placedProfile);
-      setPlacement(null);
-      setScreen("dashboard");
-      setFeedback("Placement done. FartMaths now knows where to begin.");
+      setReviewState({
+        scope: "placement",
+        correct,
+        feedbackText: correct ? "Nice thinking." : "We learned something helpful.",
+        feedbackSpeech: correct ? CORRECT_FEEDBACK_SPEECH : WRONG_FEEDBACK_SPEECH,
+        explanationText: explanation.text,
+        explanationSpeech: explanation.speech,
+        nextScreen: "dashboard",
+        nextPlacement: null,
+        nextProfile: placedProfile,
+        bannerMessage: "Placement done. FartMaths now knows where to begin."
+      });
       return;
     }
 
-    setPlacement(nextPlacement);
+    setReviewState({
+      scope: "placement",
+      correct,
+      feedbackText: correct ? "Nice thinking." : "That one was tricky.",
+      feedbackSpeech: correct ? CORRECT_FEEDBACK_SPEECH : WRONG_FEEDBACK_SPEECH,
+      explanationText: explanation.text,
+      explanationSpeech: explanation.speech,
+      nextScreen: "placement",
+      nextPlacement,
+      bannerMessage: suspiciousFast
+        ? "That answer was too fast to count for placement."
+        : correct
+          ? "Placement keeps going."
+          : "The app will keep starting gently."
+    });
   };
 
-  const startPractice = (minutes: SessionLength) => {
+  const startPractice = (minutes: SessionLength, preferredStrandId?: StrandDefinition["id"]) => {
     if (!activeChild) return;
+
     const updatedProfile = {
       ...activeChild,
       preferredSessionLength: minutes
     };
     updateProfile(updatedProfile);
-    setSession(planDailySession(updatedProfile, minutes));
+    setSession(planDailySession(updatedProfile, minutes, preferredStrandId));
+    setReviewState(null);
     setScreen("practice");
-    setFeedback("Tiny rounds, big giggles. Tap the speaker any time.");
+    setFeedback(
+      preferredStrandId
+        ? `${STRAND_MAP[preferredStrandId].shortTitle} practice is ready.`
+        : "Tiny rounds, big giggles. Tap the speaker any time."
+    );
   };
 
   const completeExampleTask = () => {
     if (!activeChild || !session || !currentTask) return;
+
     const result = advanceAfterAnswer(activeChild, session, currentTask, {
       selectedChoiceId: currentTask.question.correctChoiceId,
       correct: true,
@@ -612,56 +1494,66 @@ export default function App() {
       responseTimeMs: 2000,
       suspiciousFast: false
     });
+
     updateProfile(result.profile);
     setSession(result.session);
     setFeedback(EXAMPLE_COPY.guided);
   };
 
   const handleSessionAnswer = (choiceId: string) => {
-    if (!activeChild || !session || !currentTask) return;
+    if (!activeChild || !session || !currentTask || reviewState || answerLockedRef.current) {
+      return;
+    }
+
+    answerLockedRef.current = true;
     const responseTimeMs = Date.now() - taskShownAt;
     const correct = choiceId === currentTask.question.correctChoiceId;
     const suspiciousFast = responseTimeMs < currentTask.question.minResponseMs;
+    const hintUsed = currentTask.mode === "practice" && hintVisible;
 
     const result = advanceAfterAnswer(activeChild, session, currentTask, {
       selectedChoiceId: choiceId,
       correct,
-      firstTryCorrect: correct,
-      hintUsed: hintVisible,
+      firstTryCorrect: true,
+      hintUsed,
       responseTimeMs,
       suspiciousFast
     });
 
     let nextProfile = result.profile;
-    let nextSession = result.session;
-    const messageParts = [...result.notes];
+    let nextSession: ActiveSession | null = result.session;
+    let nextScreen: Screen = "practice";
+    let bannerMessage = result.notes.join(" ");
 
-    if (correct) {
-      speech.speak(suspiciousFast ? "Fast tap. Still nice." : "Great job.");
-      if (suspiciousFast) {
-        messageParts.unshift("Turbo tap. Correct, but not counted for mastery.");
-      } else {
-        messageParts.unshift("Great job!");
-      }
-    } else {
-      speech.speak("Nice try. Let's keep learning.");
-      messageParts.unshift("Nice try. Let's keep learning.");
+    if (result.session.currentIndex >= result.session.tasks.length) {
+      nextProfile = finalizeSession(nextProfile, result.session);
+      nextSession = null;
+      nextScreen = "dashboard";
+      bannerMessage = `Session complete: ${result.session.firstTryCorrectTotal}/${result.session.completedItems} first-try correct.`;
+    } else if (!bannerMessage) {
+      bannerMessage = correct ? "Great job." : "Keep going. The next one is ready.";
     }
 
-    if (nextSession.currentIndex >= nextSession.tasks.length) {
-      nextProfile = finalizeSession(nextProfile, nextSession);
-      updateProfile(nextProfile);
-      setSession(null);
-      setScreen("dashboard");
-      setFeedback(
-        `Session complete: ${nextSession.firstTryCorrectTotal}/${nextSession.completedItems} first-try correct.`
-      );
-      return;
-    }
+    const explanation = buildReviewExplanation(currentTask.question, correct, suspiciousFast);
+    playAnswerFeedback(correct);
 
-    updateProfile(nextProfile);
-    setSession(nextSession);
-    setFeedback(messageParts.join(" "));
+    setReviewState({
+      scope: "practice",
+      correct,
+      feedbackText: correct ? "Correct!" : "Not this one yet.",
+      feedbackSpeech: correct ? CORRECT_FEEDBACK_SPEECH : WRONG_FEEDBACK_SPEECH,
+      explanationText: explanation.text,
+      explanationSpeech: explanation.speech,
+      noteText: result.notes.join(" ") || (hintUsed ? "This round used a hint, so it does not count for mastery." : undefined),
+      rewardTitles: result.earnedRewardIds?.length
+        ? result.earnedRewardIds
+            .map((rewardId) => REWARDS.find((reward) => reward.id === rewardId)?.title ?? rewardId)
+        : undefined,
+      nextScreen,
+      nextProfile,
+      nextSession,
+      bannerMessage
+    });
   };
 
   const openParent = () => {
@@ -677,12 +1569,11 @@ export default function App() {
       setFeedback("Parent dashboard unlocked.");
       return;
     }
+
     setParentGateChallenge(makeParentGateChallenge());
     setParentGateInput("");
     setFeedback("Try the grown-up gate again.");
   };
-
-  const currentQuestion = currentTask?.question ?? currentPlacementProbe?.question ?? null;
 
   const strongSkills = useMemo(() => {
     if (!activeChild) return [];
@@ -700,13 +1591,16 @@ export default function App() {
         const leftStats = getWindowStats(left.currentProgress);
         const rightStats = getWindowStats(right.currentProgress);
         return (
-          left.currentSkill.level - right.currentSkill.level +
+          left.currentSkill.level -
+          right.currentSkill.level +
           rightStats.firstTryCorrect -
           leftStats.firstTryCorrect
         );
       })
       .slice(0, 3);
   }, [activeChild]);
+
+  const upcomingRewards = useMemo(() => (activeChild ? getUpcomingRewards(activeChild) : []), [activeChild]);
 
   return (
     <main className="app-shell">
@@ -728,7 +1622,7 @@ export default function App() {
 
       {feedback ? <div className="feedback-banner">{feedback}</div> : null}
 
-      {parentGateOpen && (
+      {parentGateOpen ? (
         <div className="modal-backdrop">
           <div className="modal card">
             <h2>Parent Gate</h2>
@@ -752,16 +1646,14 @@ export default function App() {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {screen === "home" && (
+      {screen === "home" ? (
         <section className="home-screen">
           <div className="hero card">
             <MiniBadge text="Silly fun. Serious learning." tone="peach" />
             <h2>Pick a kiddo to start today&apos;s math giggles.</h2>
-            <p>
-              Two big profiles, no passwords, and offline-ready play on one iPad.
-            </p>
+            <p>Two big profiles, no passwords, and offline-ready play on one iPad.</p>
             <div className="profile-grid">
               {PROFILE_PRESETS.map((profile) => {
                 const saved = persistedState.profiles[profile.id];
@@ -801,9 +1693,9 @@ export default function App() {
             </div>
           </div>
         </section>
-      )}
+      ) : null}
 
-      {screen === "dashboard" && activeChild && (
+      {screen === "dashboard" && activeChild ? (
         <section className="dashboard">
           <div className="dashboard-hero card">
             <div className="dashboard-headline">
@@ -811,7 +1703,7 @@ export default function App() {
               <div>
                 <MiniBadge text={`${activeChild.currentStreak}-day streak`} />
                 <h2>{activeChild.displayName}&apos;s Dashboard</h2>
-                <p>{STRANDS.length} strands grow separately, so strength in one area can race ahead.</p>
+                <p>{STRANDS.length} strands grow separately, so one area can race ahead without waiting for another.</p>
               </div>
             </div>
 
@@ -823,7 +1715,7 @@ export default function App() {
                   className="primary-button jumbo"
                   onClick={() => startPractice(activeChild.preferredSessionLength)}
                 >
-                  Play Today
+                  Play Mixed Practice
                 </button>
                 <div className="length-row">
                   {SESSION_LENGTHS.map((minutes) => (
@@ -831,24 +1723,13 @@ export default function App() {
                       key={minutes}
                       type="button"
                       className={`chip-button ${minutes === activeChild.preferredSessionLength ? "chip-button-active" : ""}`}
-                      onClick={() =>
-                        updateProfile({
-                          ...activeChild,
-                          preferredSessionLength: minutes
-                        })
-                      }
+                      onClick={() => updateProfile({ ...activeChild, preferredSessionLength: minutes })}
                     >
                       {minutes} min
                     </button>
                   ))}
                 </div>
                 <div className="row-actions">
-                  <button type="button" className="secondary-button" onClick={() => setScreen("rewards")}>
-                    My Rewards
-                  </button>
-                  <button type="button" className="secondary-button" onClick={() => setScreen("progress")}>
-                    My Progress
-                  </button>
                   <button type="button" className="secondary-button" onClick={() => setShowAvatarPicker((value) => !value)}>
                     Change Avatar
                   </button>
@@ -856,7 +1737,7 @@ export default function App() {
               </div>
             </div>
 
-            {showAvatarPicker && (
+            {showAvatarPicker ? (
               <div className="avatar-picker">
                 {AVATARS.map((avatar) => (
                   <button
@@ -870,7 +1751,62 @@ export default function App() {
                   </button>
                 ))}
               </div>
-            )}
+            ) : null}
+          </div>
+
+          <div className="card rewards-summary-card">
+            <div className="section-heading">
+              <div>
+                <h3>Next rewards</h3>
+                <p>Here are the three most likely silly prizes to earn next.</p>
+              </div>
+            </div>
+            <div className="reward-preview-grid">
+              {upcomingRewards.map((reward) => (
+                <div key={reward.rewardId} className="reward-preview-card">
+                  <strong>{reward.title}</strong>
+                  <span>{reward.description}</span>
+                  <em>{reward.remaining}</em>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="category-grid">
+            {STRANDS.map((strand) => {
+              const snapshot = getStrandSnapshot(activeChild, strand);
+              const completion = getStrandCompletion(activeChild, strand.id);
+              return (
+                <article key={strand.id} className="card category-card">
+                  <div className="category-card-top">
+                    <div>
+                      <MiniBadge text={snapshot.readiness} tone="blue" />
+                      <h3>{strand.shortTitle}</h3>
+                    </div>
+                    <span className="category-mascot">{strand.mascot}</span>
+                  </div>
+                  <p>{strand.description}</p>
+                  <div className="category-progress-row">
+                    <strong>{completion.mastered} / {completion.total}</strong>
+                    <span>{completion.percentage}%</span>
+                  </div>
+                  <div className="category-progress-bar">
+                    <span style={{ width: `${completion.percentage}%`, background: strand.color }} />
+                  </div>
+                  <small>
+                    Level {snapshot.strandProgress.currentLevel}: {snapshot.currentSkill.title}
+                  </small>
+                  <small>{MASTERY_LABELS[snapshot.currentProgress.status]}</small>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => startPractice(activeChild.preferredSessionLength, strand.id)}
+                  >
+                    Open {strand.shortTitle}
+                  </button>
+                </article>
+              );
+            })}
           </div>
 
           <div className="dashboard-columns">
@@ -901,9 +1837,9 @@ export default function App() {
             </div>
           </div>
         </section>
-      )}
+      ) : null}
 
-      {screen === "placement" && activeChild && currentPlacementProbe && (
+      {screen === "placement" && activeChild && currentPlacementProbe ? (
         <section className="practice-screen">
           <div className="card">
             <MiniBadge text={`Placement ${placement!.probeIndex + 1}/${placement!.probes.length}`} />
@@ -912,6 +1848,7 @@ export default function App() {
           </div>
 
           <TaskScreen
+            key={currentPlacementProbe.question.id}
             task={{
               skillId: currentPlacementProbe.question.skillId,
               mode: "placement",
@@ -919,106 +1856,60 @@ export default function App() {
               strandId: currentPlacementProbe.strandId,
               level: currentPlacementProbe.level
             }}
-            onAnswer={handlePlacementAnswer}
-            onUseHint={() => undefined}
             hintVisible={false}
-            onCompleteExample={() => undefined}
             revealExample={false}
+            reviewState={reviewState}
+            ttsEnabled={persistedState.settings.ttsEnabled}
+            onUseHint={() => undefined}
             onRevealExample={() => undefined}
-            onSpeak={() => speech.speak(currentPlacementProbe.question.speech)}
+            onCompleteExample={() => undefined}
+            onSubmitAnswer={handlePlacementAnswer}
+            onSpeakInstruction={() => speech.speak({ channel: "instruction", text: currentPlacementProbe.question.speech })}
+            onSpeakChoices={() => speech.speak({ channel: "choices", text: getChoiceSpeech(currentPlacementProbe.question) })}
+            onSpeakHint={() => speech.speak({ channel: "hint", text: currentPlacementProbe.question.hintSpeech ?? currentPlacementProbe.question.hint })}
+            onSpeakFeedback={() => speech.speak({ channel: "feedback", text: reviewState?.feedbackSpeech ?? "" })}
+            onSpeakExplanation={() => speech.speak({ channel: "explanation", text: reviewState?.explanationSpeech ?? "" })}
+            onContinue={continueFromReview}
           />
         </section>
-      )}
+      ) : null}
 
-      {screen === "practice" && currentTask && activeChild && (
+      {screen === "practice" && currentTask && activeChild && session ? (
         <section className="practice-screen">
           <div className="session-status card">
             <div>
-              <MiniBadge text={`${session!.completedItems}/${session!.targetItemCount} done`} />
+              <MiniBadge text={`${session.completedItems}/${session.targetItemCount} done`} />
               <h2>{activeChild.displayName}&apos;s Daily Practice</h2>
             </div>
             <div className="session-stats">
-              <span>{session!.durationMinutes} min plan</span>
-              <span>{session!.firstTryCorrectTotal} first-try wins</span>
+              <span>{session.durationMinutes} min plan</span>
+              <span>{session.firstTryCorrectTotal} first-try wins</span>
+              <span>{currentTask.focusLabel ?? "Mixed practice"}</span>
             </div>
           </div>
 
           <TaskScreen
+            key={currentTask.question.id}
             task={currentTask}
-            onAnswer={handleSessionAnswer}
-            onUseHint={() => setHintVisible(true)}
             hintVisible={hintVisible}
-            onCompleteExample={completeExampleTask}
             revealExample={revealExample}
+            reviewState={reviewState}
+            ttsEnabled={persistedState.settings.ttsEnabled}
+            onUseHint={() => setHintVisible(true)}
             onRevealExample={() => setRevealExample(true)}
-            onSpeak={() => speech.speak(currentTask.question.speech)}
+            onCompleteExample={completeExampleTask}
+            onSubmitAnswer={handleSessionAnswer}
+            onSpeakInstruction={() => speech.speak({ channel: "instruction", text: currentTask.question.speech })}
+            onSpeakChoices={() => speech.speak({ channel: "choices", text: getChoiceSpeech(currentTask.question) })}
+            onSpeakHint={() => speech.speak({ channel: "hint", text: currentTask.question.hintSpeech ?? currentTask.question.hint })}
+            onSpeakFeedback={() => speech.speak({ channel: "feedback", text: reviewState?.feedbackSpeech ?? "" })}
+            onSpeakExplanation={() => speech.speak({ channel: "explanation", text: reviewState?.explanationSpeech ?? "" })}
+            onContinue={continueFromReview}
           />
         </section>
-      )}
+      ) : null}
 
-      {screen === "rewards" && activeChild && (
-        <section className="card">
-          <h2>{activeChild.displayName}&apos;s Rewards</h2>
-          <p>Funny rewards live here, while the math stays clear and calm.</p>
-          <div className="reward-grid">
-            {REWARDS.map((reward) => {
-              const unlocked = activeChild.unlockedRewards.some((entry) => entry.rewardId === reward.id);
-              return (
-                <div
-                  key={reward.id}
-                  className={`reward-card ${unlocked ? "reward-card-unlocked" : ""}`}
-                  style={{ "--reward-color": reward.color } as CSSProperties}
-                >
-                  <strong>{reward.title}</strong>
-                  <p>{reward.description}</p>
-                  <span>{unlocked ? "Unlocked" : "Locked"}</span>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {screen === "progress" && activeChild && (
-        <section className="progress-screen">
-          <div className="card">
-            <h2>{activeChild.displayName}&apos;s Progress</h2>
-            <p>Each strand moves on its own ladder, not in big grade buckets.</p>
-          </div>
-          <div className="progress-grid">
-            {STRANDS.map((strand) => {
-              const snapshot = getStrandSnapshot(activeChild, strand);
-              return (
-                <div key={strand.id} className="card progress-card">
-                  <div className="progress-card-top">
-                    <strong>{strand.title}</strong>
-                    <MiniBadge text={snapshot.readiness} tone="blue" />
-                  </div>
-                  <p>{strand.description}</p>
-                  <div className="level-dots">
-                    {strand.levels.map((skill) => {
-                      const status = activeChild.skillProgress[skill.id].status;
-                      return (
-                        <span
-                          key={skill.id}
-                          className={`level-dot level-dot-${status}`}
-                          title={`Level ${skill.level}: ${MASTERY_LABELS[status]}`}
-                        />
-                      );
-                    })}
-                  </div>
-                  <small>
-                    Current: Level {snapshot.strandProgress.currentLevel} - {snapshot.currentSkill.title}
-                  </small>
-                  <small>Accuracy: {formatPercent(snapshot.accuracy)}</small>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {screen === "parent" && (
+      {screen === "parent" ? (
         <section className="parent-screen">
           <div className="card">
             <h2>Parent Dashboard</h2>
@@ -1030,12 +1921,9 @@ export default function App() {
                   type="checkbox"
                   checked={persistedState.settings.ttsEnabled}
                   onChange={(event) =>
-                    setPersistedState((current) => ({
+                    updateSettings((current) => ({
                       ...current,
-                      settings: {
-                        ...current.settings,
-                        ttsEnabled: event.target.checked
-                      }
+                      ttsEnabled: event.target.checked
                     }))
                   }
                 />
@@ -1049,16 +1937,33 @@ export default function App() {
                   step="0.05"
                   value={persistedState.settings.ttsRate}
                   onChange={(event) =>
-                    setPersistedState((current) => ({
+                    updateSettings((current) => ({
                       ...current,
-                      settings: {
-                        ...current.settings,
-                        ttsRate: Number(event.target.value)
-                      }
+                      ttsRate: Number(event.target.value)
                     }))
                   }
                 />
                 <strong>{persistedState.settings.ttsRate.toFixed(2)}x</strong>
+              </label>
+              <label className="select-row">
+                <span>Voice</span>
+                <select
+                  className="voice-select"
+                  value={persistedState.settings.selectedVoiceURI ?? ""}
+                  onChange={(event) =>
+                    updateSettings((current) => ({
+                      ...current,
+                      selectedVoiceURI: event.target.value || undefined
+                    }))
+                  }
+                >
+                  <option value="">Best available voice</option>
+                  {speech.voices.map((voice) => (
+                    <option key={voice.voiceURI} value={voice.voiceURI}>
+                      {voice.name} ({voice.lang})
+                    </option>
+                  ))}
+                </select>
               </label>
             </div>
           </div>
@@ -1066,6 +1971,11 @@ export default function App() {
           <div className="progress-grid">
             {(Object.keys(persistedState.profiles) as ProfileId[]).map((profileId) => {
               const profile = persistedState.profiles[profileId];
+              const weakSkills = STRANDS
+                .map((strand) => getStrandSnapshot(profile, strand))
+                .sort((left, right) => left.strandProgress.currentLevel - right.strandProgress.currentLevel)
+                .slice(0, 3);
+
               return (
                 <div key={profile.id} className="card parent-card">
                   <div className="parent-card-head">
@@ -1076,32 +1986,43 @@ export default function App() {
                       <p>{profile.recentSessions.length} recent sessions</p>
                     </div>
                   </div>
+
                   <div className="row-actions">
                     {SESSION_LENGTHS.map((minutes) => (
                       <button
                         key={minutes}
                         type="button"
                         className={`chip-button ${minutes === profile.preferredSessionLength ? "chip-button-active" : ""}`}
-                        onClick={() =>
-                          updateProfile({
-                            ...profile,
-                            preferredSessionLength: minutes
-                          })
-                        }
+                        onClick={() => updateProfile({ ...profile, preferredSessionLength: minutes })}
                       >
                         {minutes} min
                       </button>
                     ))}
                   </div>
 
+                  <div className="parent-summary-grid">
+                    <div className="parent-summary-card">
+                      <strong>Weak skills</strong>
+                      {weakSkills.map(({ strand, currentSkill }) => (
+                        <span key={strand.id}>{strand.shortTitle}: {currentSkill.title}</span>
+                      ))}
+                    </div>
+                    <div className="parent-summary-card">
+                      <strong>Recent sessions</strong>
+                      <RecentSessionList profile={profile} />
+                    </div>
+                  </div>
+
                   <div className="parent-strand-list">
                     {STRANDS.map((strand) => {
                       const snapshot = getStrandSnapshot(profile, strand);
+                      const completion = getStrandCompletion(profile, strand.id);
                       return (
                         <div key={strand.id} className="parent-strand-row">
                           <strong>{strand.shortTitle}</strong>
                           <span>{snapshot.readiness}</span>
-                          <span>Level {snapshot.strandProgress.currentLevel}</span>
+                          <span>{completion.percentage}%</span>
+                          <span>{completion.mastered}/{completion.total}</span>
                           <span>{MASTERY_LABELS[snapshot.currentProgress.status]}</span>
                         </div>
                       );
@@ -1123,7 +2044,7 @@ export default function App() {
             })}
           </div>
         </section>
-      )}
+      ) : null}
     </main>
   );
 }

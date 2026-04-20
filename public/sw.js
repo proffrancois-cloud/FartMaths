@@ -1,10 +1,20 @@
-const CACHE_NAME = "fartmaths-shell-v1";
-const RUNTIME_CACHE = "fartmaths-runtime-v1";
-const APP_SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
+const CACHE_NAME = "fartmaths-shell-v2";
+const RUNTIME_CACHE = "fartmaths-runtime-v2";
+const scopeUrl = new URL(self.registration.scope);
+const homePath = new URL("./", scopeUrl).pathname;
+const indexPath = new URL("./index.html", scopeUrl).pathname;
+const appShell = [
+  homePath,
+  indexPath,
+  new URL("./manifest.webmanifest", scopeUrl).pathname,
+  new URL("./icon-192.png", scopeUrl).pathname,
+  new URL("./icon-512.png", scopeUrl).pathname,
+  new URL("./apple-touch-icon.png", scopeUrl).pathname
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(appShell)).then(() => self.skipWaiting())
   );
 });
 
@@ -31,12 +41,12 @@ self.addEventListener("fetch", (event) => {
       fetch(event.request)
         .then((response) => {
           const clone = response.clone();
-          caches.open(RUNTIME_CACHE).then((cache) => cache.put("/index.html", clone));
+          caches.open(RUNTIME_CACHE).then((cache) => cache.put(indexPath, clone));
           return response;
         })
         .catch(async () => {
-          const cached = await caches.match("/index.html");
-          return cached || caches.match("/");
+          const cached = await caches.match(indexPath);
+          return cached || caches.match(homePath);
         })
     );
     return;

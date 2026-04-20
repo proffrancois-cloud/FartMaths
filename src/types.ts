@@ -1,9 +1,11 @@
 export type ProfileId = "ely" | "ira";
 
 export type AvatarId =
+  | "farting-emoji"
+  | "pooping-emoji"
+  | "toilet-roll-hero"
   | "happy-poop"
   | "fart-cloud"
-  | "toilet-roll-hero"
   | "butt-monster"
   | "smiling-toilet";
 
@@ -55,6 +57,28 @@ export type ActivityType =
   | "story-scene";
 
 export type SessionLength = 5 | 8 | 10;
+export type InstructionVisibility = "visible" | "minimal" | "audio-only";
+export type ChoiceVisibility = "visible" | "audio-only";
+export type LayoutMode = "grid" | "left-right" | "top-bottom" | "clock-grid";
+export type ChoiceRenderKind =
+  | "text"
+  | "number"
+  | "shape"
+  | "clock"
+  | "coin"
+  | "fraction"
+  | "position";
+export type ShapeKind =
+  | "circle"
+  | "square"
+  | "triangle"
+  | "rectangle"
+  | "hexagon"
+  | "cube"
+  | "sphere"
+  | "cylinder"
+  | "cone";
+export type CoinKind = "penny" | "nickel" | "dime" | "quarter" | "dollar";
 
 export interface AvatarDefinition {
   id: AvatarId;
@@ -62,6 +86,7 @@ export interface AvatarDefinition {
   description: string;
   accent: string;
   glow: string;
+  imageSrc: string;
 }
 
 export interface RewardDefinition {
@@ -107,8 +132,19 @@ export interface AnswerChoice {
   id: string;
   label: string;
   value: string | number;
+  speechLabel?: string;
+  renderKind?: ChoiceRenderKind;
   tint?: string;
   icon?: string;
+  shape?: ShapeKind;
+  coin?: CoinKind;
+  numericValue?: number;
+  partition?: {
+    shape: "circle" | "bar" | "rectangle";
+    parts: number;
+    equal: boolean;
+    highlightedParts?: number;
+  };
 }
 
 export interface VisualGroup {
@@ -155,6 +191,19 @@ export interface ClockChoiceData {
   label: string;
 }
 
+export interface CoinVisual {
+  id: string;
+  kind: CoinKind;
+  label: string;
+  value: number;
+}
+
+export interface CountTapData {
+  total: number;
+  token: string;
+  color: string;
+}
+
 export interface ArrayData {
   rows: number;
   columns: number;
@@ -164,6 +213,31 @@ export interface ArrayData {
 export interface StorySceneData {
   scene: string;
   equation: string;
+}
+
+export interface QuestionPresentation {
+  instructionVisibility: InstructionVisibility;
+  choiceVisibility: ChoiceVisibility;
+  layout: LayoutMode;
+  promptCue?: string;
+}
+
+export interface DragTarget {
+  id: string;
+  label: string;
+  position?: "left" | "right" | "center";
+}
+
+export interface DragModel {
+  mode: "choice-to-target" | "prompt-to-zones";
+  promptItem?: AnswerChoice;
+  targets: DragTarget[];
+}
+
+export interface QuestionExplanation {
+  text: string;
+  speech: string;
+  correctAnswerLabel: string;
 }
 
 export interface QuestionDefinition {
@@ -177,15 +251,21 @@ export interface QuestionDefinition {
   speech: string;
   supportText: string;
   hint: string;
+  hintSpeech?: string;
   minResponseMs: number;
   choices: AnswerChoice[];
   correctChoiceId: string;
+  presentation: QuestionPresentation;
+  explanation: QuestionExplanation;
   groups?: VisualGroup[];
   tenFrame?: TenFrameData;
   numberLine?: NumberLineData;
   buildNumber?: BuildNumberData;
   graph?: GraphData;
   clockChoices?: ClockChoiceData[];
+  coins?: CoinVisual[];
+  countTap?: CountTapData;
+  drag?: DragModel;
   arrayData?: ArrayData;
   story?: StorySceneData;
   targetLabel?: string;
@@ -260,6 +340,7 @@ export interface ChildProfile {
 export interface AppSettings {
   ttsEnabled: boolean;
   ttsRate: number;
+  selectedVoiceURI?: string;
 }
 
 export interface PersistedState {
@@ -290,6 +371,7 @@ export interface SessionTask {
   skillId: string;
   mode: TeachingMode;
   isCheckpoint?: boolean;
+  focusLabel?: string;
   question: QuestionDefinition;
   strandId: StrandId;
   level: number;

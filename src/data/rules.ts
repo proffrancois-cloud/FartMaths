@@ -15,7 +15,8 @@ export const NEW_LEVEL_RESCUE_FIRST_TRY_MIN = 6;
 
 export const DEFAULT_SETTINGS = {
   ttsEnabled: true,
-  ttsRate: 0.96
+  ttsRate: 0.96,
+  selectedVoiceURI: undefined
 } as const;
 
 export const DEFAULT_SESSION_LENGTH = 8 as const;

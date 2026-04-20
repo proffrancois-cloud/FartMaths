@@ -299,11 +299,18 @@ const getCheckpointCandidate = (profile: ChildProfile) => {
 
 export const planDailySession = (
   profile: ChildProfile,
-  durationMinutes: SessionLength
+  durationMinutes: SessionLength,
+  preferredStrandId?: StrandId
 ): ActiveSession => {
-  const focusStrands = [...STRAND_ORDER]
+  const ranked = [...STRAND_ORDER]
     .sort((left, right) => scoreUrgency(profile, right) - scoreUrgency(profile, left))
     .slice(0, 4);
+  const focusStrands = preferredStrandId
+    ? [preferredStrandId, ...ranked.filter((strandId) => strandId !== preferredStrandId)].slice(
+        0,
+        4
+      )
+    : ranked;
   const targetItemCount = SESSION_ITEM_TARGETS[durationMinutes];
   const checkpointCandidate = getCheckpointCandidate(profile);
   const tasks: SessionTask[] = [];
@@ -324,7 +331,13 @@ export const planDailySession = (
 
   while (tasks.length < targetItemCount) {
     const strandId = focusStrands[tasks.length % focusStrands.length] ?? STRAND_ORDER[0];
-    tasks.push(makeTask(profile, strandId));
+    tasks.push({
+      ...makeTask(profile, strandId),
+      focusLabel:
+        preferredStrandId && preferredStrandId === strandId
+          ? STRAND_MAP[strandId].shortTitle
+          : undefined
+    });
   }
 
   return {
@@ -404,6 +417,11 @@ export const advanceAfterAnswer = (
   const strandProgress = nextProfile.strandProgress[task.strandId];
   const notes: string[] = [];
   const earnedRewardIds: string[] = [];
+  const masteryEligibleCorrect =
+    outcome.correct &&
+    outcome.firstTryCorrect &&
+    !outcome.hintUsed &&
+    !outcome.suspiciousFast;
 
   skillProgress.attempts += 1;
   skillProgress.lastPracticedAt = now();
@@ -411,7 +429,7 @@ export const advanceAfterAnswer = (
 
   nextSession.currentIndex += 1;
   nextSession.completedItems += 1;
-  if (outcome.firstTryCorrect) nextSession.firstTryCorrectTotal += 1;
+  if (outcome.firstTryCorrect && !outcome.hintUsed) nextSession.firstTryCorrectTotal += 1;
   if (outcome.suspiciousFast) nextSession.suspiciousFastCount += 1;
 
   if (task.mode === "example") {
@@ -431,14 +449,14 @@ export const advanceAfterAnswer = (
     skillProgress.scoredAttempts += 1;
     if (outcome.hintUsed) skillProgress.hintsUsed += 1;
     if (outcome.suspiciousFast) skillProgress.suspiciousFastAnswers += 1;
-    if (outcome.correct && outcome.firstTryCorrect) {
+    if (masteryEligibleCorrect) {
       skillProgress.firstTryCorrectCount += 1;
     }
 
     skillProgress.recentScoredResults.push({
       questionId: task.question.id,
       answeredAt: now(),
-      firstTryCorrect: outcome.correct && outcome.firstTryCorrect,
+      firstTryCorrect: masteryEligibleCorrect,
       suspiciousFast: outcome.suspiciousFast,
       responseTimeMs: outcome.responseTimeMs
     });
@@ -520,7 +538,10 @@ export const finalizeSession = (
 ): ChildProfile => {
   const nextProfile = deepClone(profile);
   const today = dateKey();
-  const previous = nextProfile.lastActiveAt ? dateKey(nextProfile.lastActiveAt) : undefined;
+  const previous =
+    nextProfile.recentSessions.length > 0
+      ? dateKey(nextProfile.recentSessions[0].startedAt)
+      : undefined;
   const yesterday = dateKey(new Date(Date.now() - 24 * 60 * 60 * 1000));
 
   if (previous === today) {

@@ -17,6 +17,13 @@ import type {
 
 const STORAGE_KEY = "fartmaths-state-v1";
 
+const LEGACY_AVATAR_MAP = {
+  "fart-cloud": "farting-emoji",
+  "happy-poop": "pooping-emoji",
+  "butt-monster": "toilet-roll-hero",
+  "smiling-toilet": "toilet-roll-hero"
+} as const;
+
 const safeWindow = () => (typeof window === "undefined" ? undefined : window);
 
 export const stripDiacritics = (value: string) =>
@@ -106,6 +113,10 @@ const mergeState = (input?: PersistedState | null): PersistedState => {
         {
           ...base.profiles[profileId],
           ...source,
+          avatarId:
+            LEGACY_AVATAR_MAP[source.avatarId as keyof typeof LEGACY_AVATAR_MAP] ??
+            source.avatarId ??
+            base.profiles[profileId].avatarId,
           strandProgress: {
             ...base.profiles[profileId].strandProgress,
             ...source.strandProgress

@@ -10,39 +10,28 @@ export const SESSION_LENGTHS = [5, 8, 10] as const;
 
 export const AVATARS: AvatarDefinition[] = [
   {
-    id: "happy-poop",
-    label: "Happy Poop",
-    description: "A goofy little poop pal with a gold star grin.",
-    accent: "#7c4d23",
-    glow: "rgba(255, 194, 102, 0.45)"
+    id: "farting-emoji",
+    label: "Farting Emoji",
+    description: "A giggly farting face for Ély's default profile.",
+    accent: "#68cf9a",
+    glow: "rgba(125, 255, 198, 0.4)",
+    imageSrc: "/avatars/farting-emoji.svg"
   },
   {
-    id: "fart-cloud",
-    label: "Fart Cloud",
-    description: "A minty puff cloud full of giggles.",
-    accent: "#68cf9a",
-    glow: "rgba(125, 255, 198, 0.4)"
+    id: "pooping-emoji",
+    label: "Pooping Emoji",
+    description: "A cheerful pooping pal for Ira's default profile.",
+    accent: "#7c4d23",
+    glow: "rgba(255, 194, 102, 0.45)",
+    imageSrc: "/avatars/pooping-emoji.svg"
   },
   {
     id: "toilet-roll-hero",
     label: "Toilet Roll Hero",
     description: "A brave paper roll ready to save math time.",
-    accent: "#d8f1ff",
-    glow: "rgba(197, 233, 255, 0.55)"
-  },
-  {
-    id: "butt-monster",
-    label: "Butt Monster",
-    description: "A silly rounded monster who loves pairing socks.",
-    accent: "#ff9674",
-    glow: "rgba(255, 172, 145, 0.4)"
-  },
-  {
-    id: "smiling-toilet",
-    label: "Smiling Toilet",
-    description: "A cartoon toilet with a champion smile.",
     accent: "#7fd4ff",
-    glow: "rgba(115, 204, 255, 0.48)"
+    glow: "rgba(115, 204, 255, 0.48)",
+    imageSrc: "/avatars/toilet-roll-hero.svg"
   }
 ];
 
@@ -102,13 +91,13 @@ export const PROFILE_PRESETS = [
     id: "ely",
     displayName: "Ély",
     aliases: ["ely", "ély"],
-    defaultAvatarId: "fart-cloud"
+    defaultAvatarId: "farting-emoji"
   },
   {
     id: "ira",
     displayName: "Ira",
     aliases: ["ira"],
-    defaultAvatarId: "happy-poop"
+    defaultAvatarId: "pooping-emoji"
   }
 ] as const;
 
