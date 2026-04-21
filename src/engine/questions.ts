@@ -266,18 +266,18 @@ const numberRecognitionQuestion = (skill: SkillDefinition, mode: TeachingMode): 
   const instructionVisibility = promptVariant(skill, target);
   const prompt =
     instructionVisibility === "audio-only"
-      ? "Listen and drag the matching numeral."
-      : `Drag the numeral for ${word}.`;
-  const speech = `Drag the numeral ${word}.`;
+      ? "Listen and drag the numeral showing how many poopy diapers there are."
+      : `Drag the numeral showing ${word} poopy diapers.`;
+  const speech = `Drag the numeral showing ${word} poopy diapers.`;
   const choices = numberChoices(target, Math.max(0, target - 4), Math.max(target + 6, 10));
 
   return {
     ...buildBase(skill, mode, {
       prompt,
       speech,
-      hint: `The numeral ${target} is the written way to show ${word}.`,
+      hint: `The numeral ${target} shows ${word} poopy diapers.`,
       explanation: makeExplanation(
-        `${target} is the numeral for ${word}.`,
+        `${target} is the numeral for ${word} poopy diapers.`,
         String(target)
       ),
       activityType: "drag-to-match",
@@ -296,11 +296,11 @@ const cardinalityQuestion = (skill: SkillDefinition, mode: TeachingMode): Questi
   const total = rand(Math.max(1, max - 3), max);
   return {
     ...buildBase(skill, mode, {
-      prompt: "Tap each silly thing one time, then press Done.",
-      speech: "Tap each silly thing one time, then press done.",
-      hint: "Each one gets one tap. No skipping and no double taps.",
+      prompt: "Tap each fart cloud one time, then press Done.",
+      speech: "Tap each fart cloud one time, then press done.",
+      hint: "Each fart cloud gets one tap. No skipping and no double taps.",
       explanation: makeExplanation(
-        `There are ${total} silly things altogether.`,
+        `There are ${total} fart clouds altogether.`,
         `${total}`
       ),
       activityType: "count-and-tap"
@@ -340,9 +340,9 @@ const comparingQuestion = (skill: SkillDefinition, mode: TeachingMode): Question
 
   return {
     ...buildBase(skill, mode, {
-      prompt: "Which side has more?",
-      speech: "Which side has more?",
-      hint: "Count the left side and the right side, then choose the bigger set.",
+      prompt: "Which side has more poopy diapers?",
+      speech: "Which side has more poopy diapers?",
+      hint: "Count the left diaper pile and the right diaper pile, then choose the bigger set.",
       explanation: makeExplanation(
         `The left side has ${left} and the right side has ${right}, so ${correct.toLowerCase()} has more.`,
         correct
@@ -364,11 +364,11 @@ const additionSubtractionQuestion = (skill: SkillDefinition, mode: TeachingMode)
     const target = rand(filled + 1, 10);
     return {
       ...buildBase(skill, mode, {
-        prompt: `Tap more stalls until there are ${numberToWords(target)} full.`,
-        speech: `Tap more stalls until there are ${numberToWords(target)} full.`,
-        hint: "Start from the stalls already filled and add until you reach the target.",
+        prompt: `Tap more toilet stalls until there are ${numberToWords(target)} full.`,
+        speech: `Tap more toilet stalls until there are ${numberToWords(target)} full.`,
+        hint: "Start from the stalls already filled and add more poopy stalls until you reach the target.",
         explanation: makeExplanation(
-          `You started with ${filled} full stalls and needed ${target} full stalls.`,
+          `You started with ${filled} full toilet stalls and needed ${target} full toilet stalls.`,
           String(target)
         ),
         activityType: "fill-ten-frame"
@@ -391,14 +391,14 @@ const additionSubtractionQuestion = (skill: SkillDefinition, mode: TeachingMode)
   const prompt =
     skill.level >= 6
       ? isSubtraction
-        ? `Tap the number you land on after moving back ${numberToWords(addendB)}.`
-        : `Tap the number you land on after jumping forward ${numberToWords(addendB)}.`
+        ? `Tap the number you land on after moving back ${numberToWords(addendB)} fart hops.`
+        : `Tap the number you land on after jumping forward ${numberToWords(addendB)} fart hops.`
       : isSubtraction
-        ? `What is ${numberToWords(addendA)} minus ${numberToWords(addendB)}?`
-        : `What is ${numberToWords(addendA)} plus ${numberToWords(addendB)}?`;
+        ? `What is ${numberToWords(addendA)} poopy diapers minus ${numberToWords(addendB)}?`
+        : `What is ${numberToWords(addendA)} poopy diapers plus ${numberToWords(addendB)} more?`;
   const explanation = isSubtraction
-    ? `${addendA} take away ${addendB} leaves ${result}.`
-    : `${addendA} plus ${addendB} makes ${result}.`;
+    ? `${addendA} poopy diapers take away ${addendB} leaves ${result}.`
+    : `${addendA} poopy diapers plus ${addendB} more makes ${result}.`;
 
   if (skill.level >= 6) {
     const start = isSubtraction ? addendA : Math.max(0, addendA - 2);
@@ -408,8 +408,8 @@ const additionSubtractionQuestion = (skill: SkillDefinition, mode: TeachingMode)
         prompt,
         speech: prompt,
         hint: isSubtraction
-          ? "Start at the bigger number and hop backward."
-          : "Start at the first number and hop forward.",
+          ? "Start at the bigger number and hop backward with your fart hops."
+          : "Start at the first number and hop forward with your fart hops.",
         explanation: makeExplanation(explanation, String(result)),
         activityType: "number-line-tap"
       }),
@@ -438,8 +438,8 @@ const additionSubtractionQuestion = (skill: SkillDefinition, mode: TeachingMode)
       prompt,
       speech: prompt,
       hint: isSubtraction
-        ? "Use the pictures and count what is left."
-        : "Join the groups together and count the total.",
+        ? "Use the pictures and count the diapers left after some go away."
+        : "Join the poopy groups together and count the total.",
       explanation: makeExplanation(explanation, String(result)),
       activityType: "choose-the-answer"
     }),
@@ -474,13 +474,13 @@ const placeValueQuestion = (skill: SkillDefinition, mode: TeachingMode): Questio
     ...buildBase(skill, mode, {
       prompt:
         target < 20
-          ? `Build ${numberToWords(target)}.`
-          : "Build the number shown by the bundles.",
+          ? `Build ${numberToWords(target)} with toilet-roll bundles and diapers.`
+          : "Build the number shown by the toilet-roll bundles and diapers.",
       speech:
         target < 20
-          ? `Build ${numberToWords(target)}.`
+          ? `Build ${numberToWords(target)} with toilet-roll bundles and diapers.`
           : `Build the number with ${hundreds} hundreds, ${tens} tens, and ${ones} ones.`,
-      hint: "Count hundreds first, then tens, then ones.",
+      hint: "Count the big toilet-roll bundles first, then tens, then single diapers.",
       explanation: makeExplanation(
         `${hundreds} hundreds, ${tens} tens, and ${ones} ones make ${target}.`,
         String(target)
@@ -505,14 +505,14 @@ const wordProblemQuestion = (skill: SkillDefinition, mode: TeachingMode): Questi
   const answer = isAddition ? start + change : start - Math.min(change, start);
   const action = isAddition ? "more rolled in" : "rolled away";
   const equation = isAddition ? `${start} + ${change}` : `${start} - ${Math.min(change, start)}`;
-  const scene = `A poop monster had ${start} corn kernels. Then ${change} ${action}.`;
+  const scene = `A poop monster had ${start} poopy diapers. Then ${change} ${action}.`;
   const prompt = `${scene} How many are there now?`;
 
   return {
     ...buildBase(skill, mode, {
       prompt,
       speech: prompt,
-      hint: "Look at whether more joined or some went away.",
+      hint: "Look at whether more poopy diapers joined or some went away.",
       explanation: makeExplanation(
         `${equation} equals ${answer}.`,
         String(answer)
@@ -544,9 +544,9 @@ const measurementQuestion = (skill: SkillDefinition, mode: TeachingMode): Questi
     };
     return {
       ...buildBase(skill, mode, {
-        prompt: "Drag LONGER to the correct worm.",
-        speech: "Drag the word longer to the correct worm.",
-        hint: "Compare where each worm starts and ends. The longer one reaches farther.",
+        prompt: "Drag LONGER to the correct stink worm.",
+        speech: "Drag the word longer to the correct stink worm.",
+        hint: "Compare where each stink worm starts and ends. The longer one reaches farther.",
         explanation: makeExplanation(
           `The left worm is ${left} units and the right worm is ${right} units, so ${correctSide.toLowerCase()} is longer.`,
           correctSide
@@ -566,9 +566,9 @@ const measurementQuestion = (skill: SkillDefinition, mode: TeachingMode): Questi
 
   return {
     ...buildBase(skill, mode, {
-      prompt: "Which worm is longer?",
-      speech: "Which worm is longer?",
-      hint: "Look for the worm that reaches farther.",
+      prompt: "Which stink worm is longer?",
+      speech: "Which stink worm is longer?",
+      hint: "Look for the stink worm that reaches farther.",
       explanation: makeExplanation(
         `The left worm is ${left} units and the right worm is ${right} units, so ${correctSide.toLowerCase()} is longer.`,
         correctSide
@@ -617,9 +617,9 @@ const timeQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefin
       prompt:
         promptVariant(skill, minute) === "audio-only"
           ? "Listen and tap the matching clock."
-          : `Tap the clock for ${spoken}.`,
-      speech: `Tap the clock for ${spoken}.`,
-      hint: "Look at the short hand first. Then check the long hand.",
+          : `Tap the clock for potty time: ${spoken}.`,
+      speech: `Tap the clock for potty time: ${spoken}.`,
+      hint: "Look at the short hand first. Then check the long hand for potty time.",
       explanation: makeExplanation(
         `The correct clock shows ${label}.`,
         label
@@ -662,8 +662,8 @@ const moneyQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefi
 
     return {
       ...buildBase(skill, mode, {
-        prompt: `Tap the ${coinLibrary[targetKind].label.toLowerCase()}.`,
-        speech: `Tap the ${coinLibrary[targetKind].label.toLowerCase()}.`,
+        prompt: `Tap the ${coinLibrary[targetKind].label.toLowerCase()} coin for the potty shop.`,
+        speech: `Tap the ${coinLibrary[targetKind].label.toLowerCase()} coin for the potty shop.`,
         hint: "Look at the coin name and size.",
         explanation: makeExplanation(
           `The ${coinLibrary[targetKind].label.toLowerCase()} is worth ${coinLibrary[targetKind].value} cents.`,
@@ -685,9 +685,9 @@ const moneyQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefi
   const total = coins.reduce((sum, coin) => sum + coin.value, 0);
   return {
     ...buildBase(skill, mode, {
-      prompt: "Count the coins. How much money is here?",
-      speech: "Count the coins. How much money is here?",
-      hint: "Add each coin's value carefully.",
+      prompt: "Count the potty-shop coins. How much money is here?",
+      speech: "Count the potty-shop coins. How much money is here?",
+      hint: "Add each coin's value carefully to buy the potty supplies.",
       explanation: makeExplanation(
         `The coins add up to ${total} cents.`,
         `${total} cents`
@@ -757,9 +757,9 @@ const geometryQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionD
 
   return {
     ...buildBase(skill, mode, {
-      prompt: `Drag the ${correct} into the shape bin.`,
-      speech: `Drag the ${correct} into the shape bin.`,
-      hint: "Match the shape's sides and corners to the label.",
+      prompt: `Drag the ${correct} into the poopy shape bin.`,
+      speech: `Drag the ${correct} into the poopy shape bin.`,
+      hint: "Match the shape's sides and corners to the label on the poopy shape bin.",
       explanation: makeExplanation(
         `The correct shape is ${correct}.`,
         correct
@@ -821,8 +821,8 @@ const equalSharesQuestion = (skill: SkillDefinition, mode: TeachingMode): Questi
   if (skill.level >= 8) {
     return {
       ...buildBase(skill, mode, {
-        prompt: "Drag the fair-share picture into the toilet tray.",
-        speech: "Drag the fair-share picture into the toilet tray.",
+        prompt: "Drag the fair toilet-paper share picture into the tray.",
+        speech: "Drag the fair toilet-paper share picture into the tray.",
         hint: "Fair shares mean all the pieces are the same size.",
         explanation: makeExplanation(
           `${choices.find((choice) => choice.id === correctId)?.label} shows fair shares.`,
@@ -838,8 +838,8 @@ const equalSharesQuestion = (skill: SkillDefinition, mode: TeachingMode): Questi
 
   return {
     ...buildBase(skill, mode, {
-      prompt: "Pick the fair share picture.",
-      speech: "Pick the fair share picture.",
+      prompt: "Pick the fair toilet-paper share picture.",
+      speech: "Pick the fair toilet-paper share picture.",
       hint: "Fair shares mean equal-size pieces.",
       explanation: makeExplanation(
         `${choices.find((choice) => choice.id === correctId)?.label} shows equal shares.`,
@@ -858,19 +858,19 @@ const arraysQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDef
     const correct = total % 2 === 0 ? "Even" : "Odd";
     const promptItem: AnswerChoice = {
       id: "prompt-socks",
-      label: `${total} socks`,
-      speechLabel: `${total} socks`,
+      label: `${total} diapers`,
+      speechLabel: `${total} diapers`,
       value: total,
       renderKind: "text"
     };
 
     return {
       ...buildBase(skill, mode, {
-        prompt: "Drag the sock group to odd or even.",
-        speech: "Drag the sock group to odd or even.",
-        hint: "If one sock is left without a pair, it is odd.",
+        prompt: "Drag the diaper group to odd or even.",
+        speech: "Drag the diaper group to odd or even.",
+        hint: "If one diaper is left without a pair, it is odd.",
         explanation: makeExplanation(
-          `${total} is ${correct.toLowerCase()} because ${correct === "Even" ? "all the socks can make pairs." : "one sock is left over."}`,
+          `${total} is ${correct.toLowerCase()} because ${correct === "Even" ? "all the diapers can make pairs." : "one diaper is left over."}`,
           correct
         ),
         activityType: "odd-even-pairing",
@@ -885,9 +885,9 @@ const arraysQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDef
         {
           id: randomId(),
           count: total,
-          token: "🧦",
+          token: "🩲",
           color: "#9cf0ef",
-          label: `${total} socks`
+          label: `${total} diapers`
         }
       ],
       drag: buildPromptToZoneDrag(promptItem, "Odd", "Even")
@@ -899,9 +899,9 @@ const arraysQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDef
   const total = rows * columns;
   return {
     ...buildBase(skill, mode, {
-      prompt: "How many are in the array?",
-      speech: "How many are in the array?",
-      hint: "Count rows and columns carefully.",
+      prompt: "How many toilet-paper squares are in the array?",
+      speech: "How many toilet-paper squares are in the array?",
+      hint: "Count the rows and columns of toilet-paper squares carefully.",
       explanation: makeExplanation(
         `${rows} rows of ${columns} make ${total}.`,
         String(total)

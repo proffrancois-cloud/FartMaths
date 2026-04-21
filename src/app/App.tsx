@@ -234,6 +234,45 @@ const SpeakerButton = ({
   </button>
 );
 
+const InfoPanel = ({
+  title,
+  text,
+  ttsLabel,
+  onSpeak,
+  ttsEnabled
+}: {
+  title: string;
+  text: string;
+  ttsLabel?: string;
+  onSpeak?: () => void;
+  ttsEnabled: boolean;
+}) => (
+  <div className="hint-banner">
+    <div className="info-panel-head">
+      <strong>{title}</strong>
+      {onSpeak ? (
+        <SpeakerButton label={ttsLabel ?? `Read ${title}`} onSpeak={onSpeak} small disabled={!ttsEnabled} />
+      ) : null}
+    </div>
+    <span>{text}</span>
+  </div>
+);
+
+const SectionWithAudio = ({
+  title,
+  onSpeak,
+  ttsEnabled
+}: {
+  title: string;
+  onSpeak: () => void;
+  ttsEnabled: boolean;
+}) => (
+  <div className="section-audio-row">
+    <strong>{title}</strong>
+    <SpeakerButton label={`Read ${title}`} onSpeak={onSpeak} small disabled={!ttsEnabled} />
+  </div>
+);
+
 const AvatarArt = ({
   avatarId,
   label,
@@ -697,7 +736,7 @@ const CountTapActivity = ({
             onClick={() => setTapped(Array.from({ length: total }, () => false))}
             disabled={disabled}
           >
-            Reset
+            Woops mistake
           </button>
           <button
             type="button"
@@ -767,7 +806,7 @@ const FillTenFrameActivity = ({
             onClick={() => setExtraFilled(Array.from({ length: 10 - baseFilled }, () => false))}
             disabled={disabled}
           >
-            Reset
+            Woops mistake
           </button>
           <button
             type="button"
@@ -854,7 +893,7 @@ const BuildNumberActivity = ({
             setTens(0);
             setOnes(0);
           }} disabled={disabled}>
-            Reset
+            Woops mistake
           </button>
           <button type="button" className="primary-button" onClick={() => onSubmit(`choice-${total}`)} disabled={disabled}>
             Done
@@ -1054,7 +1093,7 @@ const DragActivity = ({
             }}
             disabled={disabled}
           >
-            Reset
+            Woops mistake
           </button>
           <button
             type="button"
@@ -1139,12 +1178,19 @@ const ReviewCard = ({
   onContinue: () => void;
 }) => (
   <div className={`review-card ${reviewState.correct ? "review-card-correct" : "review-card-wrong"}`}>
-    <div className="review-header">
+    <div className="review-header review-header-inline">
       <MiniBadge text={reviewState.correct ? "Correct" : "Try again"} tone={reviewState.correct ? "mint" : "peach"} />
       <h3>{reviewState.feedbackText}</h3>
+      <SpeakerButton label="Read feedback" onSpeak={onSpeakFeedback} small disabled={!ttsEnabled} />
     </div>
-    <p>{reviewState.explanationText}</p>
-    {reviewState.noteText ? <div className="hint-banner">{reviewState.noteText}</div> : null}
+    <InfoPanel
+      title="Correction"
+      text={reviewState.explanationText}
+      ttsLabel="Read correction"
+      onSpeak={onSpeakExplanation}
+      ttsEnabled={ttsEnabled}
+    />
+    {reviewState.noteText ? <InfoPanel title="Helpful note" text={reviewState.noteText} ttsEnabled={ttsEnabled} /> : null}
     {reviewState.rewardTitles && reviewState.rewardTitles.length > 0 ? (
       <div className="reward-pill-row">
         {reviewState.rewardTitles.map((title) => (
@@ -1154,10 +1200,6 @@ const ReviewCard = ({
         ))}
       </div>
     ) : null}
-    <div className="audio-toolbar">
-      <SpeakerButton label="Read feedback" onSpeak={onSpeakFeedback} small disabled={!ttsEnabled} />
-      <SpeakerButton label="Read explanation" onSpeak={onSpeakExplanation} small disabled={!ttsEnabled} />
-    </div>
     <button type="button" className="primary-button" onClick={onContinue}>
       Continue
     </button>
@@ -1170,7 +1212,6 @@ const TaskScreen = ({
   reviewState,
   ttsEnabled,
   onUseHint,
-  onCompleteExample,
   onSubmitAnswer,
   onSpeakInstruction,
   onSpeakChoices,
@@ -1185,7 +1226,6 @@ const TaskScreen = ({
   reviewState: ReviewState | null;
   ttsEnabled: boolean;
   onUseHint: () => void;
-  onCompleteExample: () => void;
   onSubmitAnswer: (choiceId: string) => void;
   onSpeakInstruction: () => void;
   onSpeakChoices: () => void;
@@ -1222,35 +1262,29 @@ const TaskScreen = ({
         <SpeakerButton label="Read instruction" onSpeak={onSpeakInstruction} disabled={!ttsEnabled} />
       </header>
 
-      <div className="audio-toolbar">
-        {task.question.choices.length > 0 ? (
-          <SpeakerButton label="Read answer choices" onSpeak={onSpeakChoices} small disabled={!ttsEnabled} />
-        ) : null}
-        {task.mode === "example" ? (
-          <SpeakerButton label="Read lesson point" onSpeak={onSpeakLesson} small disabled={!ttsEnabled} />
-        ) : null}
-        {supportsHints ? (
-          <SpeakerButton label="Read hint" onSpeak={onSpeakHint} small disabled={!ttsEnabled} />
-        ) : null}
-      </div>
-
       <p className="task-support">{task.question.supportText}</p>
 
       {task.mode === "example" ? (
         <div className="lesson-point-panel">
-          <div className="hint-banner">
-            <strong>What this lesson point teaches</strong>
-            <span>{task.question.explanation.text}</span>
-          </div>
+          <InfoPanel
+            title="Lesson point"
+            text={task.question.explanation.text}
+            ttsLabel="Read lesson point"
+            onSpeak={onSpeakLesson}
+            ttsEnabled={ttsEnabled}
+          />
+          <InfoPanel
+            title="What to notice"
+            text={task.question.hint}
+            ttsLabel="Read what to notice"
+            onSpeak={onSpeakHint}
+            ttsEnabled={ttsEnabled}
+          />
           <QuestionSupportVisual question={task.question} />
-          <TaskInteraction question={task.question} onSubmit={() => undefined} disabled />
-          <div className="hint-banner">
-            <strong>What to notice</strong>
-            <span>{task.question.hint}</span>
-          </div>
-          <button type="button" className="primary-button" onClick={onCompleteExample}>
-            Start 3 practice questions
-          </button>
+          {task.question.choices.length > 0 ? (
+            <SectionWithAudio title="Answer choices" onSpeak={onSpeakChoices} ttsEnabled={ttsEnabled} />
+          ) : null}
+          <TaskInteraction question={task.question} onSubmit={onSubmitAnswer} disabled={false} />
         </div>
       ) : reviewState ? (
         <ReviewCard
@@ -1267,11 +1301,22 @@ const TaskScreen = ({
               <button type="button" className="secondary-button" onClick={onUseHint}>
                 Need a hint?
               </button>
-              {hintVisible ? <div className="hint-banner">{task.question.hint}</div> : null}
             </div>
           ) : null}
 
+          {hintVisible ? (
+            <InfoPanel
+              title="Hint"
+              text={task.question.hint}
+              ttsLabel="Read hint"
+              onSpeak={onSpeakHint}
+              ttsEnabled={ttsEnabled}
+            />
+          ) : null}
           <QuestionSupportVisual question={task.question} />
+          {task.question.choices.length > 0 ? (
+            <SectionWithAudio title="Answer choices" onSpeak={onSpeakChoices} ttsEnabled={ttsEnabled} />
+          ) : null}
           <TaskInteraction question={task.question} onSubmit={onSubmitAnswer} disabled={Boolean(reviewState)} />
         </>
       )}
@@ -1301,7 +1346,6 @@ export default function App() {
   const [session, setSession] = useState<ActiveSession | null>(null);
   const [taskShownAt, setTaskShownAt] = useState(Date.now());
   const [hintVisible, setHintVisible] = useState(false);
-  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [parentGateOpen, setParentGateOpen] = useState(false);
   const [parentGateChallenge, setParentGateChallenge] = useState(makeParentGateChallenge());
   const [parentGateInput, setParentGateInput] = useState("");
@@ -1383,13 +1427,11 @@ export default function App() {
     setSession(null);
     setReviewState(null);
     setParentDetails(null);
-    setShowAvatarPicker(false);
     setFeedback("");
   };
 
   const openChild = (profileId: ProfileId) => {
     setActiveChildId(profileId);
-    setShowAvatarPicker(false);
     setPlacement(null);
     setSession(null);
     setScreen("dashboard");
@@ -1497,23 +1539,6 @@ export default function App() {
         ? `${STRAND_MAP[preferredStrandId].shortTitle} is ready. First comes one lesson point, then practice.`
         : "Whole curriculum is ready. Each lesson point is followed by practice from that same skill."
     );
-  };
-
-  const completeExampleTask = () => {
-    if (!activeChild || !session || !currentTask) return;
-
-    const result = advanceAfterAnswer(activeChild, session, currentTask, {
-      selectedChoiceId: currentTask.question.correctChoiceId,
-      correct: true,
-      firstTryCorrect: true,
-      hintUsed: false,
-      responseTimeMs: 2000,
-      suspiciousFast: false
-    });
-
-    updateProfile(result.profile);
-    setSession(result.session);
-    setFeedback("Lesson point done. Here come 3 practice questions on the same idea.");
   };
 
   const handleSessionAnswer = (choiceId: string) => {
@@ -1788,10 +1813,26 @@ export default function App() {
                 <div className="dashboard-actions">
                   <ProgressRing value={getOverallProgress(activeChild)} label="overall mastery" />
                   <div className="stack-actions">
-                    <div className="row-actions">
-                      <button type="button" className="secondary-button" onClick={() => setShowAvatarPicker((value) => !value)}>
-                        Change Avatar
-                      </button>
+                    <div className="avatar-picker-section">
+                      <div className="section-heading">
+                        <div>
+                          <h3>Choose avatar</h3>
+                          <p>Tap one of the three profile pictures below.</p>
+                        </div>
+                      </div>
+                      <div className="avatar-picker">
+                        {AVATARS.map((avatar) => (
+                          <button
+                            key={avatar.id}
+                            type="button"
+                            className={`avatar-choice ${activeChild.avatarId === avatar.id ? "avatar-choice-active" : ""}`}
+                            onClick={() => updateProfile({ ...activeChild, avatarId: avatar.id })}
+                          >
+                            <AvatarArt avatarId={avatar.id} label={avatar.label} />
+                            <strong>{avatar.label}</strong>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     <div className="hero-reward-strip">
                       <div className="section-heading">
@@ -1841,22 +1882,6 @@ export default function App() {
                 </div>
               </div>
             </div>
-
-            {showAvatarPicker ? (
-              <div className="avatar-picker">
-                {AVATARS.map((avatar) => (
-                  <button
-                    key={avatar.id}
-                    type="button"
-                    className={`avatar-choice ${activeChild.avatarId === avatar.id ? "avatar-choice-active" : ""}`}
-                    onClick={() => updateProfile({ ...activeChild, avatarId: avatar.id })}
-                  >
-                    <AvatarArt avatarId={avatar.id} label={avatar.label} />
-                    <strong>{avatar.label}</strong>
-                  </button>
-                ))}
-              </div>
-            ) : null}
           </div>
 
           <div className="category-grid">
@@ -1946,7 +1971,6 @@ export default function App() {
             reviewState={reviewState}
             ttsEnabled={persistedState.settings.ttsEnabled}
             onUseHint={() => undefined}
-            onCompleteExample={() => undefined}
             onSubmitAnswer={handlePlacementAnswer}
             onSpeakInstruction={() => speech.speak({ channel: "instruction", text: currentPlacementProbe.question.speech })}
             onSpeakChoices={() => speech.speak({ channel: "choices", text: getChoiceSpeech(currentPlacementProbe.question) })}
@@ -1979,7 +2003,6 @@ export default function App() {
             reviewState={reviewState}
             ttsEnabled={persistedState.settings.ttsEnabled}
             onUseHint={() => setHintVisible(true)}
-            onCompleteExample={completeExampleTask}
             onSubmitAnswer={handleSessionAnswer}
             onSpeakInstruction={() => speech.speak({ channel: "instruction", text: currentTask.question.speech })}
             onSpeakChoices={() => speech.speak({ channel: "choices", text: getChoiceSpeech(currentTask.question) })}

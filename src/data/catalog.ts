@@ -136,7 +136,7 @@ const STRAND_SEEDS: StrandSeed[] = [
     mascot: "Fart Cloud Parade",
     description: "See numerals, count forward, and build flexible number sense.",
     activityType: "drag-to-match",
-    concrete: "Use dancing puffs and poop pals to count with one touch at a time.",
+    concrete: "Count fart clouds and poopy diapers one touch at a time.",
     pictorial: "Match spoken numbers to bright numeral cards and picture sets.",
     abstract: "Read, order, and skip-count without concrete counters every time.",
     celebrations: [

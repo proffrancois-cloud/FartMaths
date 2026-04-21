@@ -369,7 +369,8 @@ button {
 .profile-insights,
 .hero-reward-strip,
 .hero-insight-card,
-.lesson-point-panel {
+.lesson-point-panel,
+.avatar-picker-section {
   display: grid;
   gap: 14px;
 }
@@ -431,6 +432,8 @@ button {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 12px;
+  position: relative;
+  z-index: 2;
 }
 
 .avatar-choice {
@@ -834,7 +837,9 @@ select {
 .avatar-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .speaker-button:disabled {
@@ -851,6 +856,16 @@ select {
 
 .audio-toolbar {
   margin-top: -4px;
+}
+
+.section-audio-row,
+.info-panel-head,
+.review-header-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .prompt-cue {
