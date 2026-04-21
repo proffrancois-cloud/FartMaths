@@ -370,7 +370,9 @@ button {
 .hero-reward-strip,
 .hero-insight-card,
 .lesson-point-panel,
-.avatar-picker-section {
+.avatar-picker-section,
+.support-visual-stack,
+.review-detail-text {
   display: grid;
   gap: 14px;
 }
@@ -566,6 +568,34 @@ button {
   gap: 4px;
 }
 
+.theme-visual-strip {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.theme-visual-chip {
+  display: inline-grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: 76px;
+  padding: 8px 10px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  text-align: center;
+}
+
+.theme-visual-chip span {
+  font-size: 0.8rem;
+  color: var(--text-soft);
+}
+
+.theme-visual-image {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+}
+
 .ten-frame {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -759,6 +789,10 @@ button {
 
 .skill-detail-modal {
   width: min(820px, 100%);
+}
+
+.review-detail-modal {
+  width: min(680px, 100%);
 }
 
 .gate-problem {
@@ -1299,6 +1333,20 @@ select {
   padding: 12px 14px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.72);
+}
+
+.skill-pill button {
+  justify-self: start;
+  min-height: 48px;
+}
+
+.review-detail-text {
+  white-space: normal;
+}
+
+.review-detail-text p {
+  margin: 0;
+  color: var(--text-soft);
 }
 
 .recent-session-list {

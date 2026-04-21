@@ -17,6 +17,7 @@ import {
   computeReadinessLabel,
   loadState,
   normalizeNameInput,
+  resetSkillProgress,
   resetStrandProgress,
   resolveProfileId,
   saveState
@@ -51,6 +52,7 @@ interface ReviewState {
   explanationText: string;
   explanationSpeech: string;
   noteText?: string;
+  detailText?: string;
   rewardTitles?: string[];
   nextScreen: Screen;
   nextPlacement?: PlacementProgress | null;
@@ -64,6 +66,19 @@ interface ParentDetailsState {
   strandId: StrandId;
 }
 
+interface TaskAttemptState {
+  attemptsUsed: number;
+  retryReady: boolean;
+  promptText?: string;
+}
+
+interface ThemeVisual {
+  key: string;
+  label: string;
+  src: string;
+  aliases: string[];
+}
+
 const baseUrl = import.meta.env.BASE_URL ?? "/";
 const avatarMap = Object.fromEntries(
   AVATARS.map((avatar) => [avatar.id, avatar])
@@ -71,6 +86,19 @@ const avatarMap = Object.fromEntries(
 
 const CORRECT_FEEDBACK_SPEECH = "yeah sweet fartty butt";
 const WRONG_FEEDBACK_SPEECH = "yuck you stinky fart";
+
+const THEME_VISUALS: ThemeVisual[] = [
+  { key: "fart", label: "Fart", src: "/visuals/Fart.png", aliases: ["fart", "toot", "puff"] },
+  { key: "poop", label: "Poop", src: "/visuals/poop.png", aliases: ["poop", "poopy", "caca"] },
+  { key: "pee", label: "Pee", src: "/visuals/pee.png", aliases: ["pee", "pipi"] },
+  { key: "diaper", label: "Diaper", src: "/visuals/diaper.png", aliases: ["diaper", "diapers", "couche"] },
+  { key: "toilet", label: "Toilet", src: "/visuals/toilet.png", aliases: ["toilet", "potty"] },
+  { key: "stinky", label: "Stinky", src: "/visuals/stinky.png", aliases: ["stinky", "stink"] },
+  { key: "butt", label: "Butt", src: "/visuals/butt.png", aliases: ["butt"] },
+  { key: "weeny", label: "Weeny", src: "/visuals/weeny.png", aliases: ["weeny"] },
+  { key: "foot", label: "Foot", src: "/visuals/foot.png", aliases: ["foot", "feet"] },
+  { key: "panties", label: "Panties", src: "/visuals/panties.png", aliases: ["panties"] }
+];
 
 const makeParentGateChallenge = (): ParentGateChallenge => {
   const left = 7 + Math.floor(Math.random() * 5);
@@ -201,6 +229,56 @@ const buildReviewExplanation = (
   };
 };
 
+const buildReviewDetails = ({
+  question,
+  correct,
+  firstTryCorrect,
+  suspiciousFast,
+  hintUsed
+}: {
+  question: QuestionDefinition;
+  correct: boolean;
+  firstTryCorrect: boolean;
+  suspiciousFast: boolean;
+  hintUsed: boolean;
+}) => {
+  const detailParts = [
+    `Prompt: ${question.prompt}`,
+    `Helpful clue: ${question.hint}`,
+    `Why it works: ${question.explanation.text}`,
+    correct
+      ? firstTryCorrect
+        ? "This answer counted as a clean first-try success."
+        : "This answer was fixed after a mistake, so it did not count as a first-try success."
+      : `Suggested answer: ${question.explanation.correctAnswerLabel}.`
+  ];
+
+  if (hintUsed) {
+    detailParts.push("A hint was used on this item, so it cannot count as mastery evidence.");
+  }
+
+  if (suspiciousFast) {
+    detailParts.push("It was answered too quickly to count as reliable mastery evidence.");
+  }
+
+  return detailParts.join("\n\n");
+};
+
+const getThemeVisuals = (question: QuestionDefinition) => {
+  const text = [
+    question.prompt,
+    question.supportText,
+    question.hint,
+    question.explanation.text
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return THEME_VISUALS.filter((visual) =>
+    visual.aliases.some((alias) => text.includes(alias))
+  ).slice(0, 4);
+};
+
 const renderAudioBadge = (index: number) => String.fromCharCode(65 + index);
 
 const MiniBadge = ({
@@ -257,6 +335,31 @@ const InfoPanel = ({
     <span>{text}</span>
   </div>
 );
+
+const ThemeVisualStrip = ({ question }: { question: QuestionDefinition }) => {
+  const visuals = getThemeVisuals(question);
+
+  if (visuals.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="theme-visual-strip" aria-hidden="true">
+      {visuals.map((visual) => (
+        <div key={visual.key} className="theme-visual-chip">
+          <img
+            src={toAssetUrl(visual.src)}
+            alt={visual.label}
+            className="theme-visual-image"
+            width="42"
+            height="42"
+          />
+          <span>{visual.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const SectionWithAudio = ({
   title,
@@ -510,79 +613,96 @@ const FractionPreview = ({
 };
 
 const QuestionSupportVisual = ({ question }: { question: QuestionDefinition }) => {
+  const themedStrip = <ThemeVisualStrip question={question} />;
+
   if (question.graph) {
     return (
-      <div className="graph-card">
-        {question.graph.bars.map((bar) => (
-          <div key={bar.label} className="graph-row">
-            <span>{bar.label}</span>
-            <div className="graph-bar-track">
-              <div className="graph-bar-fill" style={{ width: `${bar.value * 18}px`, background: bar.color }} />
+      <div className="support-visual-stack">
+        {themedStrip}
+        <div className="graph-card">
+          {question.graph.bars.map((bar) => (
+            <div key={bar.label} className="graph-row">
+              <span>{bar.label}</span>
+              <div className="graph-bar-track">
+                <div className="graph-bar-fill" style={{ width: `${bar.value * 18}px`, background: bar.color }} />
+              </div>
+              <strong>{bar.value}</strong>
             </div>
-            <strong>{bar.value}</strong>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     );
   }
 
   if (question.story) {
     return (
-      <div className="story-card">
-        <strong>{question.story.scene}</strong>
-        <span>{question.story.equation}</span>
+      <div className="support-visual-stack">
+        {themedStrip}
+        <div className="story-card">
+          <strong>{question.story.scene}</strong>
+          <span>{question.story.equation}</span>
+        </div>
       </div>
     );
   }
 
   if (question.coins) {
     return (
-      <div className="coin-strip card-surface">
-        {question.coins.map((coin) => (
-          <div key={coin.id} className="coin-strip-item">
-            <CoinPreview kind={coin.kind} />
-          </div>
-        ))}
+      <div className="support-visual-stack">
+        {themedStrip}
+        <div className="coin-strip card-surface">
+          {question.coins.map((coin) => (
+            <div key={coin.id} className="coin-strip-item">
+              <CoinPreview kind={coin.kind} />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
 
   if (question.arrayData) {
     return (
-      <div
-        className="array-grid"
-        style={{ gridTemplateColumns: `repeat(${question.arrayData.columns}, minmax(0, 1fr))` }}
-      >
-        {Array.from({ length: question.arrayData.target }, (_, index) => (
-          <span key={index} className="array-token">
-            🧻
-          </span>
-        ))}
+      <div className="support-visual-stack">
+        {themedStrip}
+        <div
+          className="array-grid"
+          style={{ gridTemplateColumns: `repeat(${question.arrayData.columns}, minmax(0, 1fr))` }}
+        >
+          {Array.from({ length: question.arrayData.target }, (_, index) => (
+            <span key={index} className="array-token">
+              🧻
+            </span>
+          ))}
+        </div>
       </div>
     );
   }
 
   if (question.groups) {
     return (
-      <div className={`group-visuals ${question.presentation.layout === "left-right" ? "group-visuals-left-right" : ""}`}>
-        {question.groups.map((group) => (
-          <div key={group.id} className="group-card">
-            <strong>{group.label}</strong>
-            <div className="token-cloud">
-              {Array.from({ length: Math.min(group.count, 24) }, (_, index) => (
-                <span key={index} style={{ color: group.color }}>
-                  {group.token}
-                </span>
-              ))}
+      <div className="support-visual-stack">
+        {themedStrip}
+        <div className={`group-visuals ${question.presentation.layout === "left-right" ? "group-visuals-left-right" : ""}`}>
+          {question.groups.map((group) => (
+            <div key={group.id} className="group-card">
+              <strong>{group.label}</strong>
+              <div className="token-cloud">
+                {Array.from({ length: Math.min(group.count, 24) }, (_, index) => (
+                  <span key={index} style={{ color: group.color }}>
+                    {group.token}
+                  </span>
+                ))}
+              </div>
+              <em>{group.count}</em>
             </div>
-            <em>{group.count}</em>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     );
   }
 
-  return null;
+  return themedStrip;
 };
 
 const ChoiceCardBody = ({
@@ -1169,17 +1289,19 @@ const ReviewCard = ({
   ttsEnabled,
   onSpeakFeedback,
   onSpeakExplanation,
+  onOpenDetails,
   onContinue
 }: {
   reviewState: ReviewState;
   ttsEnabled: boolean;
   onSpeakFeedback: () => void;
   onSpeakExplanation: () => void;
+  onOpenDetails: () => void;
   onContinue: () => void;
 }) => (
   <div className={`review-card ${reviewState.correct ? "review-card-correct" : "review-card-wrong"}`}>
     <div className="review-header review-header-inline">
-      <MiniBadge text={reviewState.correct ? "Correct" : "Try again"} tone={reviewState.correct ? "mint" : "peach"} />
+      <MiniBadge text={reviewState.correct ? "Correct" : "Not yet"} tone={reviewState.correct ? "mint" : "peach"} />
       <h3>{reviewState.feedbackText}</h3>
       <SpeakerButton label="Read feedback" onSpeak={onSpeakFeedback} small disabled={!ttsEnabled} />
     </div>
@@ -1190,6 +1312,13 @@ const ReviewCard = ({
       onSpeak={onSpeakExplanation}
       ttsEnabled={ttsEnabled}
     />
+    {reviewState.detailText ? (
+      <div className="row-actions">
+        <button type="button" className="secondary-button" onClick={onOpenDetails}>
+          Further details
+        </button>
+      </div>
+    ) : null}
     {reviewState.noteText ? <InfoPanel title="Helpful note" text={reviewState.noteText} ttsEnabled={ttsEnabled} /> : null}
     {reviewState.rewardTitles && reviewState.rewardTitles.length > 0 ? (
       <div className="reward-pill-row">
@@ -1209,9 +1338,9 @@ const ReviewCard = ({
 const TaskScreen = ({
   task,
   hintVisible,
+  retryState,
   reviewState,
   ttsEnabled,
-  onUseHint,
   onSubmitAnswer,
   onSpeakInstruction,
   onSpeakChoices,
@@ -1219,13 +1348,14 @@ const TaskScreen = ({
   onSpeakLesson,
   onSpeakFeedback,
   onSpeakExplanation,
+  onOpenReviewDetails,
   onContinue
 }: {
   task: SessionTask;
   hintVisible: boolean;
+  retryState: TaskAttemptState;
   reviewState: ReviewState | null;
   ttsEnabled: boolean;
-  onUseHint: () => void;
   onSubmitAnswer: (choiceId: string) => void;
   onSpeakInstruction: () => void;
   onSpeakChoices: () => void;
@@ -1233,6 +1363,7 @@ const TaskScreen = ({
   onSpeakLesson: () => void;
   onSpeakFeedback: () => void;
   onSpeakExplanation: () => void;
+  onOpenReviewDetails: () => void;
   onContinue: () => void;
 }) => {
   const stageTitle =
@@ -1264,7 +1395,16 @@ const TaskScreen = ({
 
       <p className="task-support">{task.question.supportText}</p>
 
-      {task.mode === "example" ? (
+      {reviewState ? (
+        <ReviewCard
+          reviewState={reviewState}
+          ttsEnabled={ttsEnabled}
+          onSpeakFeedback={onSpeakFeedback}
+          onSpeakExplanation={onSpeakExplanation}
+          onOpenDetails={onOpenReviewDetails}
+          onContinue={onContinue}
+        />
+      ) : task.mode === "example" ? (
         <div className="lesson-point-panel">
           <InfoPanel
             title="Lesson point"
@@ -1280,30 +1420,24 @@ const TaskScreen = ({
             onSpeak={onSpeakHint}
             ttsEnabled={ttsEnabled}
           />
+          {retryState.retryReady && retryState.promptText ? (
+            <InfoPanel title="Try one more time" text={retryState.promptText} ttsEnabled={ttsEnabled} />
+          ) : null}
           <QuestionSupportVisual question={task.question} />
           {task.question.choices.length > 0 ? (
             <SectionWithAudio title="Answer choices" onSpeak={onSpeakChoices} ttsEnabled={ttsEnabled} />
           ) : null}
           <TaskInteraction question={task.question} onSubmit={onSubmitAnswer} disabled={false} />
         </div>
-      ) : reviewState ? (
-        <ReviewCard
-          reviewState={reviewState}
-          ttsEnabled={ttsEnabled}
-          onSpeakFeedback={onSpeakFeedback}
-          onSpeakExplanation={onSpeakExplanation}
-          onContinue={onContinue}
-        />
       ) : (
         <>
-          {supportsHints ? (
-            <div className="hint-row">
-              <button type="button" className="secondary-button" onClick={onUseHint}>
-                Need a hint?
-              </button>
-            </div>
+          {supportsHints && retryState.retryReady && retryState.promptText ? (
+            <InfoPanel
+              title="Try one more time"
+              text={retryState.promptText}
+              ttsEnabled={ttsEnabled}
+            />
           ) : null}
-
           {hintVisible ? (
             <InfoPanel
               title="Hint"
@@ -1350,7 +1484,12 @@ export default function App() {
   const [parentGateChallenge, setParentGateChallenge] = useState(makeParentGateChallenge());
   const [parentGateInput, setParentGateInput] = useState("");
   const [parentDetails, setParentDetails] = useState<ParentDetailsState | null>(null);
+  const [taskAttemptState, setTaskAttemptState] = useState<TaskAttemptState>({
+    attemptsUsed: 0,
+    retryReady: false
+  });
   const [reviewState, setReviewState] = useState<ReviewState | null>(null);
+  const [reviewDetailOpen, setReviewDetailOpen] = useState(false);
   const answerLockedRef = useRef(false);
 
   const speech = useSpeech({
@@ -1390,7 +1529,12 @@ export default function App() {
   useEffect(() => {
     setTaskShownAt(Date.now());
     setHintVisible(false);
+    setTaskAttemptState({
+      attemptsUsed: 0,
+      retryReady: false
+    });
     setReviewState(null);
+    setReviewDetailOpen(false);
     answerLockedRef.current = false;
   }, [currentTask?.question.id, currentPlacementProbe?.question.id]);
 
@@ -1426,6 +1570,11 @@ export default function App() {
     setPlacement(null);
     setSession(null);
     setReviewState(null);
+    setTaskAttemptState({
+      attemptsUsed: 0,
+      retryReady: false
+    });
+    setReviewDetailOpen(false);
     setParentDetails(null);
     setFeedback("");
   };
@@ -1465,6 +1614,7 @@ export default function App() {
     }
 
     setReviewState(null);
+    setReviewDetailOpen(false);
     answerLockedRef.current = false;
     setFeedback(reviewState.bannerMessage);
     setScreen(reviewState.nextScreen);
@@ -1550,12 +1700,39 @@ export default function App() {
     const responseTimeMs = Date.now() - taskShownAt;
     const correct = choiceId === currentTask.question.correctChoiceId;
     const suspiciousFast = responseTimeMs < currentTask.question.minResponseMs;
-    const hintUsed = currentTask.mode === "practice" && hintVisible;
+    const firstTryCorrect = taskAttemptState.attemptsUsed === 0;
+    const canRetry = currentTask.mode === "example" || currentTask.mode === "practice";
+
+    playAnswerFeedback(correct);
+
+    if (!correct && canRetry && firstTryCorrect) {
+      setTaskAttemptState({
+        attemptsUsed: 1,
+        retryReady: true,
+        promptText:
+          currentTask.mode === "example"
+            ? "Look at the clue and try this lesson point one more time."
+            : "Use the hint and try this practice one more time."
+      });
+      setHintVisible(true);
+      setFeedback(
+        currentTask.mode === "example"
+          ? "Lesson point stays open for one more try."
+          : "Hint opened. Try the practice question once more."
+      );
+      answerLockedRef.current = false;
+      return;
+    }
+
+    const hintUsed =
+      hintVisible ||
+      taskAttemptState.attemptsUsed > 0 ||
+      currentTask.mode === "example";
 
     const result = advanceAfterAnswer(activeChild, session, currentTask, {
       selectedChoiceId: choiceId,
       correct,
-      firstTryCorrect: true,
+      firstTryCorrect,
       hintUsed,
       responseTimeMs,
       suspiciousFast
@@ -1576,16 +1753,28 @@ export default function App() {
     }
 
     const explanation = buildReviewExplanation(currentTask.question, correct, suspiciousFast);
-    playAnswerFeedback(correct);
 
     setReviewState({
       scope: "practice",
       correct,
-      feedbackText: correct ? "Correct!" : "Not this one yet.",
+      feedbackText: correct ? "Correct!" : "Let's look at the answer together.",
       feedbackSpeech: correct ? CORRECT_FEEDBACK_SPEECH : WRONG_FEEDBACK_SPEECH,
       explanationText: explanation.text,
       explanationSpeech: explanation.speech,
-      noteText: result.notes.join(" ") || (hintUsed ? "This round used a hint, so it does not count for mastery." : undefined),
+      noteText:
+        result.notes.join(" ") ||
+        (hintUsed
+          ? firstTryCorrect
+            ? "This round used support, so it does not count for mastery."
+            : "This one was fixed after a mistake, so it does not count as a first-try mastery win."
+          : undefined),
+      detailText: buildReviewDetails({
+        question: currentTask.question,
+        correct,
+        firstTryCorrect,
+        suspiciousFast,
+        hintUsed
+      }),
       rewardTitles: result.earnedRewardIds?.length
         ? result.earnedRewardIds
             .map((rewardId) => REWARDS.find((reward) => reward.id === rewardId)?.title ?? rewardId)
@@ -1721,6 +1910,22 @@ export default function App() {
                       <div key={skill.id} className="skill-pill">
                         <span>{skill.title}</span>
                         <small>{skill.summary}</small>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => {
+                            if (!window.confirm(`Reset ${skill.title} for ${parentDetailProfile.displayName}?`)) return;
+                            setPersistedState((current) =>
+                              resetSkillProgress(current, parentDetailProfile.id, skill.id)
+                            );
+                            setParentDetails({
+                              profileId: parentDetailProfile.id,
+                              strandId: parentDetailStrand.id
+                            });
+                          }}
+                        >
+                          Reset skill
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -1737,6 +1942,22 @@ export default function App() {
                       <div key={skill.id} className="skill-pill">
                         <span>{skill.title}</span>
                         <small>{MASTERY_LABELS[parentDetailProfile.skillProgress[skill.id].status]}</small>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => {
+                            if (!window.confirm(`Reset ${skill.title} for ${parentDetailProfile.displayName}?`)) return;
+                            setPersistedState((current) =>
+                              resetSkillProgress(current, parentDetailProfile.id, skill.id)
+                            );
+                            setParentDetails({
+                              profileId: parentDetailProfile.id,
+                              strandId: parentDetailStrand.id
+                            });
+                          }}
+                        >
+                          Reset skill
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -1744,6 +1965,27 @@ export default function App() {
                   <small>Everything in this category is currently mastered.</small>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {reviewDetailOpen && reviewState?.detailText ? (
+        <div className="modal-backdrop">
+          <div className="modal card review-detail-modal">
+            <div className="section-heading">
+              <div>
+                <h2>Further details</h2>
+                <p>Extra teacher notes for this question.</p>
+              </div>
+              <button type="button" className="secondary-button" onClick={() => setReviewDetailOpen(false)}>
+                Close
+              </button>
+            </div>
+            <div className="review-detail-text">
+              {reviewState.detailText.split("\n\n").map((part, index) => (
+                <p key={`detail-${index}`}>{part}</p>
+              ))}
             </div>
           </div>
         </div>
@@ -1968,9 +2210,9 @@ export default function App() {
               level: currentPlacementProbe.level
             }}
             hintVisible={false}
+            retryState={{ attemptsUsed: 0, retryReady: false }}
             reviewState={reviewState}
             ttsEnabled={persistedState.settings.ttsEnabled}
-            onUseHint={() => undefined}
             onSubmitAnswer={handlePlacementAnswer}
             onSpeakInstruction={() => speech.speak({ channel: "instruction", text: currentPlacementProbe.question.speech })}
             onSpeakChoices={() => speech.speak({ channel: "choices", text: getChoiceSpeech(currentPlacementProbe.question) })}
@@ -1978,6 +2220,7 @@ export default function App() {
             onSpeakLesson={() => speech.speak({ channel: "explanation", text: currentPlacementProbe.question.explanation.speech })}
             onSpeakFeedback={() => speech.speak({ channel: "feedback", text: reviewState?.feedbackSpeech ?? "" })}
             onSpeakExplanation={() => speech.speak({ channel: "explanation", text: reviewState?.explanationSpeech ?? "" })}
+            onOpenReviewDetails={() => setReviewDetailOpen(true)}
             onContinue={continueFromReview}
           />
         </section>
@@ -2000,9 +2243,9 @@ export default function App() {
             key={currentTask.question.id}
             task={currentTask}
             hintVisible={hintVisible}
+            retryState={taskAttemptState}
             reviewState={reviewState}
             ttsEnabled={persistedState.settings.ttsEnabled}
-            onUseHint={() => setHintVisible(true)}
             onSubmitAnswer={handleSessionAnswer}
             onSpeakInstruction={() => speech.speak({ channel: "instruction", text: currentTask.question.speech })}
             onSpeakChoices={() => speech.speak({ channel: "choices", text: getChoiceSpeech(currentTask.question) })}
@@ -2010,6 +2253,7 @@ export default function App() {
             onSpeakLesson={() => speech.speak({ channel: "explanation", text: currentTask.question.explanation.speech })}
             onSpeakFeedback={() => speech.speak({ channel: "feedback", text: reviewState?.feedbackSpeech ?? "" })}
             onSpeakExplanation={() => speech.speak({ channel: "explanation", text: reviewState?.explanationSpeech ?? "" })}
+            onOpenReviewDetails={() => setReviewDetailOpen(true)}
             onContinue={continueFromReview}
           />
         </section>

@@ -223,6 +223,43 @@ export const resetStrandProgress = (
   };
 };
 
+export const resetSkillProgress = (
+  state: PersistedState,
+  profileId: ProfileId,
+  skillId: string
+): PersistedState => {
+  const currentProfile = state.profiles[profileId];
+  const strand = STRANDS.find((item) => item.levels.some((skill) => skill.id === skillId));
+  const skill = strand?.levels.find((item) => item.id === skillId);
+
+  if (!strand || !skill) {
+    return state;
+  }
+
+  const strandProgress = currentProfile.strandProgress[strand.id];
+
+  return {
+    ...state,
+    profiles: {
+      ...state.profiles,
+      [profileId]: {
+        ...currentProfile,
+        strandProgress: {
+          ...currentProfile.strandProgress,
+          [strand.id]: {
+            ...strandProgress,
+            currentLevel: Math.min(strandProgress.currentLevel, skill.level)
+          }
+        },
+        skillProgress: {
+          ...currentProfile.skillProgress,
+          [skillId]: defaultSkillProgress(skillId)
+        }
+      }
+    }
+  };
+};
+
 export const dateKey = (dateLike: string | Date = new Date()) => {
   const date = typeof dateLike === "string" ? new Date(dateLike) : dateLike;
   return date.toISOString().slice(0, 10);

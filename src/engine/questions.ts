@@ -18,6 +18,12 @@ import type {
   VisualGroup
 } from "../types";
 
+interface ThemeCounter {
+  token: string;
+  singular: string;
+  plural: string;
+}
+
 const randomId = () =>
   globalThis.crypto?.randomUUID?.() ??
   `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -135,18 +141,34 @@ const textChoices = (correct: string, options: string[]): AnswerChoice[] =>
     }))
   );
 
-const groupsFromCounts = (left: number, right: number, leftLabel: string, rightLabel: string): VisualGroup[] => [
+const themeCounters: ThemeCounter[] = [
+  { token: "💨", singular: "fart cloud", plural: "fart clouds" },
+  { token: "💩", singular: "poop pal", plural: "poop pals" },
+  { token: "🩲", singular: "poopy diaper", plural: "poopy diapers" }
+];
+
+const themedCountLabel = (count: number, counter: ThemeCounter) =>
+  `${count} ${count === 1 ? counter.singular : counter.plural}`;
+
+const groupsFromCounts = (
+  left: number,
+  right: number,
+  leftLabel: string,
+  rightLabel: string,
+  leftToken = "💩",
+  rightToken = leftToken
+): VisualGroup[] => [
   {
     id: randomId(),
     count: left,
-    token: "💩",
+    token: leftToken,
     color: "#7dc6ff",
     label: leftLabel
   },
   {
     id: randomId(),
     count: right,
-    token: "💨",
+    token: rightToken,
     color: "#ffbc67",
     label: rightLabel
   }
@@ -263,26 +285,27 @@ const numberRecognitionQuestion = (skill: SkillDefinition, mode: TeachingMode): 
   const max = [5, 10, 20, 30, 50, 100, 120, 150, 500, 1000][skill.level - 1];
   const target = skill.level <= 3 ? rand(0, max) : sample([rand(0, max), sample([10, 20, 30, 40, 50, 60, 70, 80, 90])]);
   const word = numberToWords(target);
+  const counter = sample(themeCounters);
   const instructionVisibility = promptVariant(skill, target);
   const prompt =
     instructionVisibility === "audio-only"
-      ? "Listen and drag the numeral showing how many poopy diapers there are."
-      : `Drag the numeral showing ${word} poopy diapers.`;
-  const speech = `Drag the numeral showing ${word} poopy diapers.`;
+      ? `Listen and drag the numeral showing how many ${counter.plural} there are.`
+      : `Drag the numeral showing ${word} ${counter.plural}.`;
+  const speech = `Drag the numeral showing ${word} ${counter.plural}.`;
   const choices = numberChoices(target, Math.max(0, target - 4), Math.max(target + 6, 10));
 
   return {
     ...buildBase(skill, mode, {
       prompt,
       speech,
-      hint: `The numeral ${target} shows ${word} poopy diapers.`,
+      hint: `The numeral ${target} shows ${word} ${counter.plural}.`,
       explanation: makeExplanation(
-        `${target} is the numeral for ${word} poopy diapers.`,
+        `${target} is the numeral for ${word} ${counter.plural}.`,
         String(target)
       ),
       activityType: "drag-to-match",
       instructionVisibility,
-      promptCue: skill.level <= 2 ? `${"💨 ".repeat(Math.max(1, target || 1)).trim()}` : undefined
+      promptCue: skill.level <= 2 ? `${`${counter.token} `.repeat(Math.max(1, target || 1)).trim()}` : undefined
     }),
     choices,
     correctChoiceId: `choice-${target}`,
@@ -294,13 +317,14 @@ const numberRecognitionQuestion = (skill: SkillDefinition, mode: TeachingMode): 
 const cardinalityQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
   const max = [3, 5, 10, 12, 15, 18, 20, 24, 30, 40][skill.level - 1];
   const total = rand(Math.max(1, max - 3), max);
+  const counter = sample(themeCounters);
   return {
     ...buildBase(skill, mode, {
-      prompt: "Tap each fart cloud one time, then press Done.",
-      speech: "Tap each fart cloud one time, then press done.",
-      hint: "Each fart cloud gets one tap. No skipping and no double taps.",
+      prompt: `Tap each ${counter.singular} one time, then press Done.`,
+      speech: `Tap each ${counter.singular} one time, then press done.`,
+      hint: `Each ${counter.singular} gets one tap. No skipping and no double taps.`,
       explanation: makeExplanation(
-        `There are ${total} fart clouds altogether.`,
+        `There are ${themedCountLabel(total, counter)} altogether.`,
         `${total}`
       ),
       activityType: "count-and-tap"
@@ -309,7 +333,7 @@ const cardinalityQuestion = (skill: SkillDefinition, mode: TeachingMode): Questi
     correctChoiceId: `count-${total}`,
     countTap: {
       total,
-      token: sample(["💩", "🧻", "💨"]),
+      token: counter.token,
       color: "#7ed89f"
     }
   };
@@ -321,6 +345,7 @@ const comparingQuestion = (skill: SkillDefinition, mode: TeachingMode): Question
   const left = values[0];
   const right = values[1];
   const correct = left > right ? "Left" : "Right";
+  const counter = sample(themeCounters);
   const choices = [
     {
       id: "choice-left",
@@ -340,11 +365,11 @@ const comparingQuestion = (skill: SkillDefinition, mode: TeachingMode): Question
 
   return {
     ...buildBase(skill, mode, {
-      prompt: "Which side has more poopy diapers?",
-      speech: "Which side has more poopy diapers?",
-      hint: "Count the left diaper pile and the right diaper pile, then choose the bigger set.",
+      prompt: `Which side has more ${counter.plural}?`,
+      speech: `Which side has more ${counter.plural}?`,
+      hint: `Count the left ${counter.singular} group and the right ${counter.singular} group, then choose the bigger set.`,
       explanation: makeExplanation(
-        `The left side has ${left} and the right side has ${right}, so ${correct.toLowerCase()} has more.`,
+        `The left side has ${themedCountLabel(left, counter)} and the right side has ${themedCountLabel(right, counter)}, so ${correct.toLowerCase()} has more.`,
         correct
       ),
       activityType: "compare-two-groups",
@@ -352,7 +377,7 @@ const comparingQuestion = (skill: SkillDefinition, mode: TeachingMode): Question
     }),
     choices,
     correctChoiceId: correct === "Left" ? "choice-left" : "choice-right",
-    groups: groupsFromCounts(left, right, "Left", "Right")
+    groups: groupsFromCounts(left, right, "Left", "Right", counter.token)
   };
 };
 
@@ -388,17 +413,18 @@ const additionSubtractionQuestion = (skill: SkillDefinition, mode: TeachingMode)
     ? rand(0, addendA)
     : rand(1, Math.max(2, Math.floor(limit * 0.4)));
   const result = isSubtraction ? addendA - addendB : addendA + addendB;
+  const counter = sample(themeCounters);
   const prompt =
     skill.level >= 6
       ? isSubtraction
         ? `Tap the number you land on after moving back ${numberToWords(addendB)} fart hops.`
         : `Tap the number you land on after jumping forward ${numberToWords(addendB)} fart hops.`
       : isSubtraction
-        ? `What is ${numberToWords(addendA)} poopy diapers minus ${numberToWords(addendB)}?`
-        : `What is ${numberToWords(addendA)} poopy diapers plus ${numberToWords(addendB)} more?`;
+        ? `What is ${numberToWords(addendA)} ${counter.plural} minus ${numberToWords(addendB)}?`
+        : `What is ${numberToWords(addendA)} ${counter.plural} plus ${numberToWords(addendB)} more?`;
   const explanation = isSubtraction
-    ? `${addendA} poopy diapers take away ${addendB} leaves ${result}.`
-    : `${addendA} poopy diapers plus ${addendB} more makes ${result}.`;
+    ? `${addendA} ${counter.plural} take away ${addendB} leaves ${result}.`
+    : `${addendA} ${counter.plural} plus ${addendB} more makes ${result}.`;
 
   if (skill.level >= 6) {
     const start = isSubtraction ? addendA : Math.max(0, addendA - 2);
@@ -443,26 +469,26 @@ const additionSubtractionQuestion = (skill: SkillDefinition, mode: TeachingMode)
       explanation: makeExplanation(explanation, String(result)),
       activityType: "choose-the-answer"
     }),
-    choices: numberChoices(result, Math.max(0, result - 4), result + 5),
-    correctChoiceId: `choice-${result}`,
-    groups: [
-      {
-        id: randomId(),
-        count: addendA,
-        token: isSubtraction ? "🚽" : "💩",
-        color: "#ff9b8d",
-        label: "First group"
-      },
-      {
-        id: randomId(),
-        count: addendB,
-        token: isSubtraction ? "💨" : "🧻",
-        color: "#7ed89f",
-        label: isSubtraction ? "Taken away" : "Second group"
-      }
-    ]
+      choices: numberChoices(result, Math.max(0, result - 4), result + 5),
+      correctChoiceId: `choice-${result}`,
+      groups: [
+        {
+          id: randomId(),
+          count: addendA,
+          token: counter.token,
+          color: "#ff9b8d",
+          label: "First group"
+        },
+        {
+          id: randomId(),
+          count: addendB,
+          token: counter.token,
+          color: "#7ed89f",
+          label: isSubtraction ? "Taken away" : "Second group"
+        }
+      ]
+    };
   };
-};
 
 const placeValueQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
   const hundreds = skill.level >= 8 ? rand(0, Math.min(3, skill.level - 6)) : 0;
@@ -559,7 +585,7 @@ const measurementQuestion = (skill: SkillDefinition, mode: TeachingMode): Questi
         { id: "zone-right", label: "Right", speechLabel: "Right", value: "right", renderKind: "position" }
       ],
       correctChoiceId: correctSide === "Left" ? "zone-left" : "zone-right",
-      groups: groupsFromCounts(left, right, "Left worm", "Right worm"),
+      groups: groupsFromCounts(left, right, "Left worm", "Right worm", "🪱"),
       drag: buildPromptToZoneDrag(promptItem, "Left", "Right")
     };
   }
@@ -581,7 +607,7 @@ const measurementQuestion = (skill: SkillDefinition, mode: TeachingMode): Questi
       { id: "choice-right", label: "Right", speechLabel: "Right", value: "right", renderKind: "position" }
     ],
     correctChoiceId: correctSide === "Left" ? "choice-left" : "choice-right",
-    groups: groupsFromCounts(left, right, "Left worm", "Right worm")
+    groups: groupsFromCounts(left, right, "Left worm", "Right worm", "🪱")
   };
 };
 

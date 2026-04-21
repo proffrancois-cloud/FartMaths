@@ -15,7 +15,7 @@ export const AVATARS: AvatarDefinition[] = [
     description: "A speedy emoji with little fart clouds behind it.",
     accent: "#68cf9a",
     glow: "rgba(125, 255, 198, 0.4)",
-    imageSrc: "/avatars/farting-emoji.svg"
+    imageSrc: "/avatars/farting-emoji.png"
   },
   {
     id: "pooping-emoji",
@@ -23,7 +23,7 @@ export const AVATARS: AvatarDefinition[] = [
     description: "A squishy emoji sitting on the toilet and trying very hard.",
     accent: "#7c4d23",
     glow: "rgba(255, 194, 102, 0.45)",
-    imageSrc: "/avatars/pooping-emoji.svg"
+    imageSrc: "/avatars/pooping-emoji.png"
   },
   {
     id: "toilet-roll-hero",
@@ -31,7 +31,7 @@ export const AVATARS: AvatarDefinition[] = [
     description: "A toilet roll pinching its nose at the stinkiest math jokes.",
     accent: "#7fd4ff",
     glow: "rgba(115, 204, 255, 0.48)",
-    imageSrc: "/avatars/toilet-roll-hero.svg"
+    imageSrc: "/avatars/toilet-roll-hero.png"
   }
 ];
 
