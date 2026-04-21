@@ -280,8 +280,25 @@ const makeTask = (profile: ChildProfile, strandId: StrandId): SessionTask => {
   };
 };
 
-const getCheckpointCandidate = (profile: ChildProfile) => {
-  const sorted = [...STRAND_ORDER].sort(
+const makeTaskForSkill = (
+  skillId: string,
+  strandId: StrandId,
+  mode: SessionTask["mode"],
+  focusLabel?: string
+): SessionTask => {
+  const skill = STRAND_MAP[strandId].levels.find((item) => item.id === skillId)!;
+  return {
+    skillId: skill.id,
+    mode,
+    strandId,
+    level: skill.level,
+    focusLabel,
+    question: generateQuestion(skill, mode)
+  };
+};
+
+const getCheckpointCandidate = (profile: ChildProfile, allowedStrands = STRAND_ORDER) => {
+  const sorted = [...allowedStrands].sort(
     (left, right) => scoreUrgency(profile, right) - scoreUrgency(profile, left)
   );
 
@@ -302,18 +319,17 @@ export const planDailySession = (
   durationMinutes: SessionLength,
   preferredStrandId?: StrandId
 ): ActiveSession => {
-  const ranked = [...STRAND_ORDER]
-    .sort((left, right) => scoreUrgency(profile, right) - scoreUrgency(profile, left))
-    .slice(0, 4);
-  const focusStrands = preferredStrandId
-    ? [preferredStrandId, ...ranked.filter((strandId) => strandId !== preferredStrandId)].slice(
-        0,
-        4
-      )
-    : ranked;
-  const targetItemCount = SESSION_ITEM_TARGETS[durationMinutes];
-  const checkpointCandidate = getCheckpointCandidate(profile);
+  const ranked = [...STRAND_ORDER].sort(
+    (left, right) => scoreUrgency(profile, right) - scoreUrgency(profile, left)
+  );
+  const focusStrands = preferredStrandId ? [preferredStrandId] : ranked;
+  const desiredItemCount = SESSION_ITEM_TARGETS[durationMinutes];
+  const checkpointCandidate = getCheckpointCandidate(profile, focusStrands);
   const tasks: SessionTask[] = [];
+  const lessonQueuedSkills = new Set<string>();
+  const sessionLabel = preferredStrandId
+    ? STRAND_MAP[preferredStrandId].shortTitle
+    : "Whole Curriculum";
 
   if (checkpointCandidate) {
     for (let index = 0; index < CHECKPOINT_LENGTH; index += 1) {
@@ -324,19 +340,29 @@ export const planDailySession = (
         level: checkpointCandidate.level,
         mode: "check",
         isCheckpoint: true,
+        focusLabel: sessionLabel,
         question: generateQuestion(skill, "check")
       });
     }
   }
 
-  while (tasks.length < targetItemCount) {
+  while (tasks.length < desiredItemCount) {
     const strandId = focusStrands[tasks.length % focusStrands.length] ?? STRAND_ORDER[0];
+    const nextTask = makeTask(profile, strandId);
+
+    if (nextTask.mode === "example" && !lessonQueuedSkills.has(nextTask.skillId)) {
+      lessonQueuedSkills.add(nextTask.skillId);
+      tasks.push(makeTaskForSkill(nextTask.skillId, strandId, "example", sessionLabel));
+      for (let index = 0; index < 3; index += 1) {
+        tasks.push(makeTaskForSkill(nextTask.skillId, strandId, "practice", sessionLabel));
+      }
+      continue;
+    }
+
     tasks.push({
-      ...makeTask(profile, strandId),
-      focusLabel:
-        preferredStrandId && preferredStrandId === strandId
-          ? STRAND_MAP[strandId].shortTitle
-          : undefined
+      ...nextTask,
+      mode: nextTask.mode === "example" ? "practice" : nextTask.mode,
+      focusLabel: sessionLabel
     });
   }
 
@@ -345,7 +371,7 @@ export const planDailySession = (
     childId: profile.id,
     durationMinutes,
     startedAt: now(),
-    targetItemCount,
+    targetItemCount: tasks.length,
     currentIndex: 0,
     completedItems: 0,
     firstTryCorrectTotal: 0,

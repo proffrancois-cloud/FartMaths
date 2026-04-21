@@ -1,7 +1,7 @@
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AVATARS, PROFILE_PRESETS, REWARDS, SESSION_LENGTHS, STRANDS, STRAND_MAP } from "../data/catalog";
-import { EXAMPLE_COPY, MASTERY_LABELS } from "../data/rules";
+import { AVATARS, PROFILE_PRESETS, REWARDS, STRANDS, STRAND_MAP } from "../data/catalog";
+import { DEFAULT_SESSION_LENGTH, MASTERY_LABELS } from "../data/rules";
 import {
   advanceAfterAnswer,
   applyPlacementResults,
@@ -17,7 +17,7 @@ import {
   computeReadinessLabel,
   loadState,
   normalizeNameInput,
-  resetProfile,
+  resetStrandProgress,
   resolveProfileId,
   saveState
 } from "../lib/storage";
@@ -35,10 +35,10 @@ import type {
   PlacementProgress,
   ProfileId,
   QuestionDefinition,
-  SessionLength,
   SessionTask,
   ShapeKind,
-  StrandDefinition
+  StrandDefinition,
+  StrandId
 } from "../types";
 
 type Screen = "home" | "dashboard" | "placement" | "practice" | "parent";
@@ -57,6 +57,11 @@ interface ReviewState {
   nextProfile?: ChildProfile;
   nextSession?: ActiveSession | null;
   bannerMessage: string;
+}
+
+interface ParentDetailsState {
+  profileId: ProfileId;
+  strandId: StrandId;
 }
 
 const baseUrl = import.meta.env.BASE_URL ?? "/";
@@ -86,11 +91,20 @@ const toAssetUrl = (path: string) => {
 const formatPercent = (value: number) => `${Math.round(value * 100)}%`;
 
 const getOverallProgress = (profile: ChildProfile) => {
+  const { mastered, total } = getOverallMasteryCounts(profile);
+  return total === 0 ? 0 : mastered / total;
+};
+
+const getOverallMasteryCounts = (profile: ChildProfile) => {
   const total = STRANDS.reduce((sum, strand) => sum + strand.levels.length, 0);
   const mastered = Object.values(profile.skillProgress).filter(
     (skill) => skill.status === "mastered" || skill.status === "review-needed"
   ).length;
-  return total === 0 ? 0 : mastered / total;
+
+  return {
+    mastered,
+    total
+  };
 };
 
 const getStrandSnapshot = (profile: ChildProfile, strand: StrandDefinition) => {
@@ -109,6 +123,22 @@ const getStrandSnapshot = (profile: ChildProfile, strand: StrandDefinition) => {
     currentProgress,
     accuracy,
     readiness: computeReadinessLabel(strandProgress.highestUnlockedLevel)
+  };
+};
+
+const getStrandSkillBuckets = (profile: ChildProfile, strand: StrandDefinition) => {
+  const mastered = strand.levels.filter((skill) => {
+    const status = profile.skillProgress[skill.id].status;
+    return status === "mastered" || status === "review-needed";
+  });
+  const remaining = strand.levels.filter((skill) => {
+    const status = profile.skillProgress[skill.id].status;
+    return status !== "mastered" && status !== "review-needed";
+  });
+
+  return {
+    mastered,
+    remaining
   };
 };
 
@@ -1137,32 +1167,30 @@ const ReviewCard = ({
 const TaskScreen = ({
   task,
   hintVisible,
-  revealExample,
   reviewState,
   ttsEnabled,
   onUseHint,
-  onRevealExample,
   onCompleteExample,
   onSubmitAnswer,
   onSpeakInstruction,
   onSpeakChoices,
   onSpeakHint,
+  onSpeakLesson,
   onSpeakFeedback,
   onSpeakExplanation,
   onContinue
 }: {
   task: SessionTask;
   hintVisible: boolean;
-  revealExample: boolean;
   reviewState: ReviewState | null;
   ttsEnabled: boolean;
   onUseHint: () => void;
-  onRevealExample: () => void;
   onCompleteExample: () => void;
   onSubmitAnswer: (choiceId: string) => void;
   onSpeakInstruction: () => void;
   onSpeakChoices: () => void;
   onSpeakHint: () => void;
+  onSpeakLesson: () => void;
   onSpeakFeedback: () => void;
   onSpeakExplanation: () => void;
   onContinue: () => void;
@@ -1171,7 +1199,7 @@ const TaskScreen = ({
     task.mode === "placement"
       ? "Placement"
       : task.mode === "example"
-        ? "Example Mode"
+        ? "Lesson Point"
         : task.isCheckpoint
           ? "Checkpoint"
           : task.mode === "practice"
@@ -1198,6 +1226,9 @@ const TaskScreen = ({
         {task.question.choices.length > 0 ? (
           <SpeakerButton label="Read answer choices" onSpeak={onSpeakChoices} small disabled={!ttsEnabled} />
         ) : null}
+        {task.mode === "example" ? (
+          <SpeakerButton label="Read lesson point" onSpeak={onSpeakLesson} small disabled={!ttsEnabled} />
+        ) : null}
         {supportsHints ? (
           <SpeakerButton label="Read hint" onSpeak={onSpeakHint} small disabled={!ttsEnabled} />
         ) : null}
@@ -1206,22 +1237,20 @@ const TaskScreen = ({
       <p className="task-support">{task.question.supportText}</p>
 
       {task.mode === "example" ? (
-        <div className="example-controls">
-          {!revealExample ? (
-            <button type="button" className="primary-button" onClick={onRevealExample}>
-              Show me an example
-            </button>
-          ) : (
-            <>
-              <div className="hint-banner">
-                <strong>{EXAMPLE_COPY.intro}</strong>
-                <span>{task.question.hint}</span>
-              </div>
-              <button type="button" className="primary-button" onClick={onCompleteExample}>
-                I saw it. Let&apos;s go on.
-              </button>
-            </>
-          )}
+        <div className="lesson-point-panel">
+          <div className="hint-banner">
+            <strong>What this lesson point teaches</strong>
+            <span>{task.question.explanation.text}</span>
+          </div>
+          <QuestionSupportVisual question={task.question} />
+          <TaskInteraction question={task.question} onSubmit={() => undefined} disabled />
+          <div className="hint-banner">
+            <strong>What to notice</strong>
+            <span>{task.question.hint}</span>
+          </div>
+          <button type="button" className="primary-button" onClick={onCompleteExample}>
+            Start 3 practice questions
+          </button>
         </div>
       ) : reviewState ? (
         <ReviewCard
@@ -1254,7 +1283,7 @@ const RecentSessionList = ({ profile }: { profile: ChildProfile }) => (
   <div className="recent-session-list">
     {profile.recentSessions.slice(0, 3).map((recent) => (
       <div key={recent.id} className="recent-session-row">
-        <strong>{recent.durationMinutes} min</strong>
+        <strong>{new Date(recent.startedAt).toLocaleDateString()}</strong>
         <span>{recent.firstTryCorrect}/{recent.itemsCompleted} first-try correct</span>
       </div>
     ))}
@@ -1272,11 +1301,11 @@ export default function App() {
   const [session, setSession] = useState<ActiveSession | null>(null);
   const [taskShownAt, setTaskShownAt] = useState(Date.now());
   const [hintVisible, setHintVisible] = useState(false);
-  const [revealExample, setRevealExample] = useState(false);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [parentGateOpen, setParentGateOpen] = useState(false);
   const [parentGateChallenge, setParentGateChallenge] = useState(makeParentGateChallenge());
   const [parentGateInput, setParentGateInput] = useState("");
+  const [parentDetails, setParentDetails] = useState<ParentDetailsState | null>(null);
   const [reviewState, setReviewState] = useState<ReviewState | null>(null);
   const answerLockedRef = useRef(false);
 
@@ -1317,7 +1346,6 @@ export default function App() {
   useEffect(() => {
     setTaskShownAt(Date.now());
     setHintVisible(false);
-    setRevealExample(false);
     setReviewState(null);
     answerLockedRef.current = false;
   }, [currentTask?.question.id, currentPlacementProbe?.question.id]);
@@ -1354,6 +1382,7 @@ export default function App() {
     setPlacement(null);
     setSession(null);
     setReviewState(null);
+    setParentDetails(null);
     setShowAvatarPicker(false);
     setFeedback("");
   };
@@ -1361,18 +1390,10 @@ export default function App() {
   const openChild = (profileId: ProfileId) => {
     setActiveChildId(profileId);
     setShowAvatarPicker(false);
-    const profile = persistedState.profiles[profileId];
-    if (!profile.placementDone) {
-      setPlacement(buildPlacementProgress());
-      setSession(null);
-      setScreen("placement");
-      setFeedback("Warm-up time. We are checking each strand a little bit.");
-    } else {
-      setPlacement(null);
-      setSession(null);
-      setScreen("dashboard");
-      setFeedback("");
-    }
+    setPlacement(null);
+    setSession(null);
+    setScreen("dashboard");
+    setFeedback("");
   };
 
   const handleNameSubmit = () => {
@@ -1465,21 +1486,16 @@ export default function App() {
     });
   };
 
-  const startPractice = (minutes: SessionLength, preferredStrandId?: StrandDefinition["id"]) => {
+  const startPractice = (preferredStrandId?: StrandDefinition["id"]) => {
     if (!activeChild) return;
 
-    const updatedProfile = {
-      ...activeChild,
-      preferredSessionLength: minutes
-    };
-    updateProfile(updatedProfile);
-    setSession(planDailySession(updatedProfile, minutes, preferredStrandId));
+    setSession(planDailySession(activeChild, DEFAULT_SESSION_LENGTH, preferredStrandId));
     setReviewState(null);
     setScreen("practice");
     setFeedback(
       preferredStrandId
-        ? `${STRAND_MAP[preferredStrandId].shortTitle} practice is ready.`
-        : "Tiny rounds, big giggles. Tap the speaker any time."
+        ? `${STRAND_MAP[preferredStrandId].shortTitle} is ready. First comes one lesson point, then practice.`
+        : "Whole curriculum is ready. Each lesson point is followed by practice from that same skill."
     );
   };
 
@@ -1497,7 +1513,7 @@ export default function App() {
 
     updateProfile(result.profile);
     setSession(result.session);
-    setFeedback(EXAMPLE_COPY.guided);
+    setFeedback("Lesson point done. Here come 3 practice questions on the same idea.");
   };
 
   const handleSessionAnswer = (choiceId: string) => {
@@ -1601,6 +1617,16 @@ export default function App() {
   }, [activeChild]);
 
   const upcomingRewards = useMemo(() => (activeChild ? getUpcomingRewards(activeChild) : []), [activeChild]);
+  const overallCounts = useMemo(
+    () => (activeChild ? getOverallMasteryCounts(activeChild) : { mastered: 0, total: 0 }),
+    [activeChild]
+  );
+  const parentDetailProfile = parentDetails ? persistedState.profiles[parentDetails.profileId] : null;
+  const parentDetailStrand = parentDetails ? STRAND_MAP[parentDetails.strandId] : null;
+  const parentDetailBuckets =
+    parentDetailProfile && parentDetailStrand
+      ? getStrandSkillBuckets(parentDetailProfile, parentDetailStrand)
+      : null;
 
   return (
     <main className="app-shell">
@@ -1648,6 +1674,56 @@ export default function App() {
         </div>
       ) : null}
 
+      {parentDetails && parentDetailProfile && parentDetailStrand && parentDetailBuckets ? (
+        <div className="modal-backdrop">
+          <div className="modal card skill-detail-modal">
+            <div className="section-heading">
+              <div>
+                <h2>{parentDetailProfile.displayName}: {parentDetailStrand.shortTitle}</h2>
+                <p>Mastered skills and remaining skills for this category.</p>
+              </div>
+              <button type="button" className="secondary-button" onClick={() => setParentDetails(null)}>
+                Close
+              </button>
+            </div>
+
+            <div className="skill-modal-grid">
+              <div className="parent-summary-card">
+                <strong>Mastered</strong>
+                {parentDetailBuckets.mastered.length > 0 ? (
+                  <div className="skill-pill-list">
+                    {parentDetailBuckets.mastered.map((skill) => (
+                      <div key={skill.id} className="skill-pill">
+                        <span>{skill.title}</span>
+                        <small>{skill.summary}</small>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <small>No mastered skills in this category yet.</small>
+                )}
+              </div>
+
+              <div className="parent-summary-card">
+                <strong>Remaining</strong>
+                {parentDetailBuckets.remaining.length > 0 ? (
+                  <div className="skill-pill-list">
+                    {parentDetailBuckets.remaining.map((skill) => (
+                      <div key={skill.id} className="skill-pill">
+                        <span>{skill.title}</span>
+                        <small>{MASTERY_LABELS[parentDetailProfile.skillProgress[skill.id].status]}</small>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <small>Everything in this category is currently mastered.</small>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {screen === "home" ? (
         <section className="home-screen">
           <div className="hero card">
@@ -1666,7 +1742,7 @@ export default function App() {
                   >
                     <AvatarArt avatarId={saved.avatarId} label={saved.displayName} large />
                     <strong>{saved.displayName}</strong>
-                    <span>{saved.currentStreak}-day streak</span>
+                    <span>Open profile</span>
                   </button>
                 );
               })}
@@ -1698,41 +1774,70 @@ export default function App() {
       {screen === "dashboard" && activeChild ? (
         <section className="dashboard">
           <div className="dashboard-hero card">
-            <div className="dashboard-headline">
-              <AvatarArt avatarId={activeChild.avatarId} label={activeChild.displayName} large />
-              <div>
-                <MiniBadge text={`${activeChild.currentStreak}-day streak`} />
-                <h2>{activeChild.displayName}&apos;s Dashboard</h2>
-                <p>{STRANDS.length} strands grow separately, so one area can race ahead without waiting for another.</p>
-              </div>
-            </div>
-
-            <div className="dashboard-actions">
-              <ProgressRing value={getOverallProgress(activeChild)} label="overall mastery" />
-              <div className="stack-actions">
-                <button
-                  type="button"
-                  className="primary-button jumbo"
-                  onClick={() => startPractice(activeChild.preferredSessionLength)}
-                >
-                  Play Mixed Practice
-                </button>
-                <div className="length-row">
-                  {SESSION_LENGTHS.map((minutes) => (
-                    <button
-                      key={minutes}
-                      type="button"
-                      className={`chip-button ${minutes === activeChild.preferredSessionLength ? "chip-button-active" : ""}`}
-                      onClick={() => updateProfile({ ...activeChild, preferredSessionLength: minutes })}
-                    >
-                      {minutes} min
-                    </button>
-                  ))}
+            <div className="dashboard-hero-grid">
+              <div className="dashboard-main-panel">
+                <div className="dashboard-headline">
+                  <AvatarArt avatarId={activeChild.avatarId} label={activeChild.displayName} large />
+                  <div>
+                    <MiniBadge text={`${overallCounts.mastered}/${overallCounts.total} skills mastered`} />
+                    <h2>{activeChild.displayName}&apos;s Dashboard</h2>
+                    <p>Choose any category right away. Each one keeps its own lesson point, practice, and mastery progress.</p>
+                  </div>
                 </div>
-                <div className="row-actions">
-                  <button type="button" className="secondary-button" onClick={() => setShowAvatarPicker((value) => !value)}>
-                    Change Avatar
-                  </button>
+
+                <div className="dashboard-actions">
+                  <ProgressRing value={getOverallProgress(activeChild)} label="overall mastery" />
+                  <div className="stack-actions">
+                    <div className="row-actions">
+                      <button type="button" className="secondary-button" onClick={() => setShowAvatarPicker((value) => !value)}>
+                        Change Avatar
+                      </button>
+                    </div>
+                    <div className="hero-reward-strip">
+                      <div className="section-heading">
+                        <div>
+                          <h3>Next rewards</h3>
+                          <p>The next three silly prizes are shown right here.</p>
+                        </div>
+                      </div>
+                      <div className="reward-preview-grid">
+                        {upcomingRewards.map((reward) => (
+                          <div key={reward.rewardId} className="reward-preview-card">
+                            <strong>{reward.title}</strong>
+                            <span>{reward.description}</span>
+                            <em>{reward.remaining}</em>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="profile-insights">
+                <div className="hero-insight-card">
+                  <h3>Strong Skills</h3>
+                  <div className="strand-list">
+                    {strongSkills.map(({ strand, strandProgress, currentSkill }) => (
+                      <div key={strand.id} className="strand-row">
+                        <strong>{strand.shortTitle}</strong>
+                        <span>Level {strandProgress.highestUnlockedLevel}</span>
+                        <small>{currentSkill.title}</small>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="hero-insight-card">
+                  <h3>Needs Practice</h3>
+                  <div className="strand-list">
+                    {needsPractice.map(({ strand, currentSkill, currentProgress }) => (
+                      <div key={strand.id} className="strand-row">
+                        <strong>{strand.shortTitle}</strong>
+                        <span>{MASTERY_LABELS[currentProgress.status]}</span>
+                        <small>{currentSkill.title}</small>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1754,25 +1859,34 @@ export default function App() {
             ) : null}
           </div>
 
-          <div className="card rewards-summary-card">
-            <div className="section-heading">
-              <div>
-                <h3>Next rewards</h3>
-                <p>Here are the three most likely silly prizes to earn next.</p>
-              </div>
-            </div>
-            <div className="reward-preview-grid">
-              {upcomingRewards.map((reward) => (
-                <div key={reward.rewardId} className="reward-preview-card">
-                  <strong>{reward.title}</strong>
-                  <span>{reward.description}</span>
-                  <em>{reward.remaining}</em>
-                </div>
-              ))}
-            </div>
-          </div>
-
           <div className="category-grid">
+            <article className="card category-card category-card-whole">
+              <div className="category-card-top">
+                <div>
+                  <MiniBadge text="Adaptive mix" tone="blue" />
+                  <h3>Whole Curriculum</h3>
+                </div>
+                <span className="category-mascot">All 13 categories together</span>
+              </div>
+              <p>Pulls from each child&apos;s current lesson point or level across the whole curriculum.</p>
+              <div className="category-progress-row">
+                <strong>{overallCounts.mastered} / {overallCounts.total}</strong>
+                <span>{Math.round(getOverallProgress(activeChild) * 100)}%</span>
+              </div>
+              <div className="category-progress-bar">
+                <span style={{ width: `${Math.round(getOverallProgress(activeChild) * 100)}%`, background: "#2fb169" }} />
+              </div>
+              <small>Uses each category&apos;s current skill and review needs.</small>
+              <small>Lesson point first when a new skill appears, then 3 practice questions.</small>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => startPractice()}
+              >
+                Open Whole Curriculum
+              </button>
+            </article>
+
             {STRANDS.map((strand) => {
               const snapshot = getStrandSnapshot(activeChild, strand);
               const completion = getStrandCompletion(activeChild, strand.id);
@@ -1800,41 +1914,13 @@ export default function App() {
                   <button
                     type="button"
                     className="primary-button"
-                    onClick={() => startPractice(activeChild.preferredSessionLength, strand.id)}
+                    onClick={() => startPractice(strand.id)}
                   >
                     Open {strand.shortTitle}
                   </button>
                 </article>
               );
             })}
-          </div>
-
-          <div className="dashboard-columns">
-            <div className="card">
-              <h3>Strong Skills</h3>
-              <div className="strand-list">
-                {strongSkills.map(({ strand, strandProgress, currentSkill }) => (
-                  <div key={strand.id} className="strand-row">
-                    <strong>{strand.shortTitle}</strong>
-                    <span>Level {strandProgress.highestUnlockedLevel}</span>
-                    <small>{currentSkill.title}</small>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="card">
-              <h3>Needs Practice</h3>
-              <div className="strand-list">
-                {needsPractice.map(({ strand, currentSkill, currentProgress }) => (
-                  <div key={strand.id} className="strand-row">
-                    <strong>{strand.shortTitle}</strong>
-                    <span>{MASTERY_LABELS[currentProgress.status]}</span>
-                    <small>{currentSkill.title}</small>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         </section>
       ) : null}
@@ -1857,16 +1943,15 @@ export default function App() {
               level: currentPlacementProbe.level
             }}
             hintVisible={false}
-            revealExample={false}
             reviewState={reviewState}
             ttsEnabled={persistedState.settings.ttsEnabled}
             onUseHint={() => undefined}
-            onRevealExample={() => undefined}
             onCompleteExample={() => undefined}
             onSubmitAnswer={handlePlacementAnswer}
             onSpeakInstruction={() => speech.speak({ channel: "instruction", text: currentPlacementProbe.question.speech })}
             onSpeakChoices={() => speech.speak({ channel: "choices", text: getChoiceSpeech(currentPlacementProbe.question) })}
             onSpeakHint={() => speech.speak({ channel: "hint", text: currentPlacementProbe.question.hintSpeech ?? currentPlacementProbe.question.hint })}
+            onSpeakLesson={() => speech.speak({ channel: "explanation", text: currentPlacementProbe.question.explanation.speech })}
             onSpeakFeedback={() => speech.speak({ channel: "feedback", text: reviewState?.feedbackSpeech ?? "" })}
             onSpeakExplanation={() => speech.speak({ channel: "explanation", text: reviewState?.explanationSpeech ?? "" })}
             onContinue={continueFromReview}
@@ -1879,12 +1964,11 @@ export default function App() {
           <div className="session-status card">
             <div>
               <MiniBadge text={`${session.completedItems}/${session.targetItemCount} done`} />
-              <h2>{activeChild.displayName}&apos;s Daily Practice</h2>
+              <h2>{activeChild.displayName}&apos;s Practice</h2>
             </div>
             <div className="session-stats">
-              <span>{session.durationMinutes} min plan</span>
               <span>{session.firstTryCorrectTotal} first-try wins</span>
-              <span>{currentTask.focusLabel ?? "Mixed practice"}</span>
+              <span>{currentTask.focusLabel ?? "Whole Curriculum"}</span>
             </div>
           </div>
 
@@ -1892,16 +1976,15 @@ export default function App() {
             key={currentTask.question.id}
             task={currentTask}
             hintVisible={hintVisible}
-            revealExample={revealExample}
             reviewState={reviewState}
             ttsEnabled={persistedState.settings.ttsEnabled}
             onUseHint={() => setHintVisible(true)}
-            onRevealExample={() => setRevealExample(true)}
             onCompleteExample={completeExampleTask}
             onSubmitAnswer={handleSessionAnswer}
             onSpeakInstruction={() => speech.speak({ channel: "instruction", text: currentTask.question.speech })}
             onSpeakChoices={() => speech.speak({ channel: "choices", text: getChoiceSpeech(currentTask.question) })}
             onSpeakHint={() => speech.speak({ channel: "hint", text: currentTask.question.hintSpeech ?? currentTask.question.hint })}
+            onSpeakLesson={() => speech.speak({ channel: "explanation", text: currentTask.question.explanation.speech })}
             onSpeakFeedback={() => speech.speak({ channel: "feedback", text: reviewState?.feedbackSpeech ?? "" })}
             onSpeakExplanation={() => speech.speak({ channel: "explanation", text: reviewState?.explanationSpeech ?? "" })}
             onContinue={continueFromReview}
@@ -1913,7 +1996,7 @@ export default function App() {
         <section className="parent-screen">
           <div className="card">
             <h2>Parent Dashboard</h2>
-            <p>Settings, readiness, streaks, and recent sessions for both children.</p>
+            <p>Audio settings, strand progress, category reset tools, and skill detail popups for both children.</p>
             <div className="parent-settings">
               <label className="toggle-row">
                 <span>Text-to-speech</span>
@@ -1982,22 +2065,8 @@ export default function App() {
                     <AvatarArt avatarId={profile.avatarId} label={profile.displayName} />
                     <div>
                       <h3>{profile.displayName}</h3>
-                      <p>{profile.currentStreak}-day streak</p>
                       <p>{profile.recentSessions.length} recent sessions</p>
                     </div>
-                  </div>
-
-                  <div className="row-actions">
-                    {SESSION_LENGTHS.map((minutes) => (
-                      <button
-                        key={minutes}
-                        type="button"
-                        className={`chip-button ${minutes === profile.preferredSessionLength ? "chip-button-active" : ""}`}
-                        onClick={() => updateProfile({ ...profile, preferredSessionLength: minutes })}
-                      >
-                        {minutes} min
-                      </button>
-                    ))}
                   </div>
 
                   <div className="parent-summary-grid">
@@ -2019,26 +2088,43 @@ export default function App() {
                       const completion = getStrandCompletion(profile, strand.id);
                       return (
                         <div key={strand.id} className="parent-strand-row">
-                          <strong>{strand.shortTitle}</strong>
-                          <span>{snapshot.readiness}</span>
-                          <span>{completion.percentage}%</span>
-                          <span>{completion.mastered}/{completion.total}</span>
-                          <span>{MASTERY_LABELS[snapshot.currentProgress.status]}</span>
+                          <div className="parent-strand-main">
+                            <strong>{strand.shortTitle}</strong>
+                            <span>{snapshot.readiness}</span>
+                            <span>{completion.percentage}%</span>
+                            <span>{completion.mastered}/{completion.total}</span>
+                            <span>{MASTERY_LABELS[snapshot.currentProgress.status]}</span>
+                          </div>
+                          <div className="parent-strand-actions">
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              onClick={() =>
+                                setParentDetails({
+                                  profileId: profile.id,
+                                  strandId: strand.id
+                                })
+                              }
+                            >
+                              See skills
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary-button danger-button"
+                              onClick={() => {
+                                if (!window.confirm(`Reset ${strand.shortTitle} for ${profile.displayName}?`)) return;
+                                setPersistedState((current) =>
+                                  resetStrandProgress(current, profile.id, strand.id)
+                                );
+                              }}
+                            >
+                              Reset category
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
                   </div>
-
-                  <button
-                    type="button"
-                    className="secondary-button danger-button"
-                    onClick={() => {
-                      if (!window.confirm(`Reset all progress for ${profile.displayName}?`)) return;
-                      setPersistedState((current) => resetProfile(current, profile.id));
-                    }}
-                  >
-                    Reset Profile
-                  </button>
                 </div>
               );
             })}

@@ -345,6 +345,11 @@ button {
   gap: 18px;
 }
 
+.dashboard-hero-grid {
+  display: grid;
+  gap: 18px;
+}
+
 .dashboard-headline,
 .dashboard-actions,
 .parent-card-head {
@@ -358,6 +363,31 @@ button {
   display: grid;
   gap: 12px;
   flex: 1;
+}
+
+.dashboard-main-panel,
+.profile-insights,
+.hero-reward-strip,
+.hero-insight-card,
+.lesson-point-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.profile-insights {
+  align-content: start;
+}
+
+.hero-insight-card {
+  padding: 16px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.hero-reward-strip {
+  padding: 16px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.44);
 }
 
 .progress-ring {
@@ -458,6 +488,12 @@ button {
 .task-screen {
   display: grid;
   gap: 18px;
+}
+
+.lesson-point-panel {
+  padding: 18px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.58);
 }
 
 .task-header {
@@ -716,6 +752,10 @@ button {
 
 .modal {
   width: min(480px, 100%);
+}
+
+.skill-detail-modal {
+  width: min(820px, 100%);
 }
 
 .gate-problem {
@@ -1222,6 +1262,30 @@ select {
   color: var(--text-soft);
 }
 
+.parent-strand-main,
+.parent-strand-actions,
+.skill-pill-list {
+  display: grid;
+  gap: 8px;
+}
+
+.parent-strand-actions {
+  margin-top: 8px;
+}
+
+.skill-modal-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.skill-pill {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
 .recent-session-list {
   display: grid;
   gap: 8px;
@@ -1247,12 +1311,30 @@ select {
   .count-tap-grid,
   .build-number-grid,
   .parent-summary-grid,
-  .reward-preview-grid {
+  .reward-preview-grid,
+  .skill-modal-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .category-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-hero-grid {
+    grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+  }
+
+  .parent-strand-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .parent-strand-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    margin-top: 0;
   }
 }
 

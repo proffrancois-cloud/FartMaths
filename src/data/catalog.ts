@@ -11,24 +11,24 @@ export const SESSION_LENGTHS = [5, 8, 10] as const;
 export const AVATARS: AvatarDefinition[] = [
   {
     id: "farting-emoji",
-    label: "Farting Emoji",
-    description: "A giggly farting face for Ély's default profile.",
+    label: "Fart Dash",
+    description: "A speedy emoji with little fart clouds behind it.",
     accent: "#68cf9a",
     glow: "rgba(125, 255, 198, 0.4)",
     imageSrc: "/avatars/farting-emoji.svg"
   },
   {
     id: "pooping-emoji",
-    label: "Pooping Emoji",
-    description: "A cheerful pooping pal for Ira's default profile.",
+    label: "Toilet Plop",
+    description: "A squishy emoji sitting on the toilet and trying very hard.",
     accent: "#7c4d23",
     glow: "rgba(255, 194, 102, 0.45)",
     imageSrc: "/avatars/pooping-emoji.svg"
   },
   {
     id: "toilet-roll-hero",
-    label: "Toilet Roll Hero",
-    description: "A brave paper roll ready to save math time.",
+    label: "Nose Pinch Roll",
+    description: "A toilet roll pinching its nose at the stinkiest math jokes.",
     accent: "#7fd4ff",
     glow: "rgba(115, 204, 255, 0.48)",
     imageSrc: "/avatars/toilet-roll-hero.svg"
