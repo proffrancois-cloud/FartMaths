@@ -142,9 +142,9 @@ const textChoices = (correct: string, options: string[]): AnswerChoice[] =>
   );
 
 const themeCounters: ThemeCounter[] = [
-  { token: "💨", singular: "fart cloud", plural: "fart clouds" },
-  { token: "💩", singular: "poop pal", plural: "poop pals" },
-  { token: "🩲", singular: "poopy diaper", plural: "poopy diapers" }
+  { token: "fart", singular: "fart cloud", plural: "fart clouds" },
+  { token: "poop", singular: "poop pal", plural: "poop pals" },
+  { token: "diaper", singular: "poopy diaper", plural: "poopy diapers" }
 ];
 
 const themedCountLabel = (count: number, counter: ThemeCounter) =>
@@ -155,7 +155,7 @@ const groupsFromCounts = (
   right: number,
   leftLabel: string,
   rightLabel: string,
-  leftToken = "💩",
+  leftToken = "poop",
   rightToken = leftToken
 ): VisualGroup[] => [
   {
@@ -201,7 +201,7 @@ const buildBase = (
     layout?: LayoutMode;
     instructionVisibility?: "visible" | "minimal" | "audio-only";
     choiceVisibility?: "visible" | "audio-only";
-    promptCue?: string;
+    promptCue?: QuestionDefinition["presentation"]["promptCue"];
   }
 ) => ({
   id: randomId(),
@@ -305,7 +305,7 @@ const numberRecognitionQuestion = (skill: SkillDefinition, mode: TeachingMode): 
       ),
       activityType: "drag-to-match",
       instructionVisibility,
-      promptCue: skill.level <= 2 ? `${`${counter.token} `.repeat(Math.max(1, target || 1)).trim()}` : undefined
+      promptCue: skill.level <= 2 ? { visualKey: counter.token, count: target } : undefined
     }),
     choices,
     correctChoiceId: `choice-${target}`,
@@ -585,7 +585,7 @@ const measurementQuestion = (skill: SkillDefinition, mode: TeachingMode): Questi
         { id: "zone-right", label: "Right", speechLabel: "Right", value: "right", renderKind: "position" }
       ],
       correctChoiceId: correctSide === "Left" ? "zone-left" : "zone-right",
-      groups: groupsFromCounts(left, right, "Left worm", "Right worm", "🪱"),
+      groups: groupsFromCounts(left, right, "Left worm", "Right worm", "foot"),
       drag: buildPromptToZoneDrag(promptItem, "Left", "Right")
     };
   }
@@ -607,7 +607,7 @@ const measurementQuestion = (skill: SkillDefinition, mode: TeachingMode): Questi
       { id: "choice-right", label: "Right", speechLabel: "Right", value: "right", renderKind: "position" }
     ],
     correctChoiceId: correctSide === "Left" ? "choice-left" : "choice-right",
-    groups: groupsFromCounts(left, right, "Left worm", "Right worm", "🪱")
+    groups: groupsFromCounts(left, right, "Left worm", "Right worm", "foot")
   };
 };
 
@@ -911,7 +911,7 @@ const arraysQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDef
         {
           id: randomId(),
           count: total,
-          token: "🩲",
+          token: "panties",
           color: "#9cf0ef",
           label: `${total} diapers`
         }

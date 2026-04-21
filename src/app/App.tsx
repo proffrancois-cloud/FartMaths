@@ -68,8 +68,6 @@ interface ParentDetailsState {
 
 interface TaskAttemptState {
   attemptsUsed: number;
-  retryReady: boolean;
-  promptText?: string;
 }
 
 interface ThemeVisual {
@@ -84,8 +82,64 @@ const avatarMap = Object.fromEntries(
   AVATARS.map((avatar) => [avatar.id, avatar])
 ) as Partial<Record<AvatarId, AvatarDefinition>>;
 
-const CORRECT_FEEDBACK_SPEECH = "yeah sweet fartty butt";
-const WRONG_FEEDBACK_SPEECH = "yuck you stinky fart";
+const CORRECT_FEEDBACK_LINES = [
+  "Nice job, little stinky genius.",
+  "Yes, sweet farty brain.",
+  "Correct, potty champion.",
+  "Woohoo, clever little poop head.",
+  "You got it, toilet star.",
+  "Right answer, stinky smarty.",
+  "Boom, perfect potty math.",
+  "Yes, you clever little butt.",
+  "Great job, caca captain.",
+  "Correct, pipi pro.",
+  "You nailed it, diaper hero.",
+  "That's right, little fart boss.",
+  "Super job, stinky feet thinker.",
+  "Yes, potty power.",
+  "You did it, toilet wizard.",
+  "Correct, little couche champion.",
+  "Nice one, clever caca kid.",
+  "Sweet, you solved the stinky math.",
+  "Yes, butt brain for the win.",
+  "Hooray, perfect poop pick."
+];
+
+const FIRST_WRONG_FEEDBACK_LINES = [
+  "Oops, stinky choice. Try again.",
+  "Uh-oh, wrong potty. Try again.",
+  "Yuck, that one smells wrong.",
+  "Oopsy caca, not that one.",
+  "Nope, little stinker. Try again.",
+  "That answer missed the toilet.",
+  "Pipi problem. Check again.",
+  "Stinky guess, try once more.",
+  "Not this poop, try another one.",
+  "Uh-oh, your butt guessed wrong.",
+  "That one is too stinky to be right.",
+  "Wrong potty pick. Try again.",
+  "Caca mistake. Let's look again.",
+  "Not right yet, little fart brain.",
+  "Oops, that answer needs a fresh wipe.",
+  "That one splashed the wrong way.",
+  "Too stinky, not correct.",
+  "Your toilet guess was brave, but wrong.",
+  "Nope, that one belongs in the wrong potty.",
+  "Try again, little poop detective."
+];
+
+const FINAL_WRONG_FEEDBACK_LINES = [
+  "Good try, little stinker. Look again.",
+  "Almost, potty pal.",
+  "Close, but that one is still a bit stinky.",
+  "Nice try, caca captain.",
+  "Almost there, toilet hero.",
+  "Good try, little fart friend.",
+  "Not yet, but your potty brain is working.",
+  "So close, little poop pro.",
+  "Try again, stinky star.",
+  "Almost, couche champion."
+];
 
 const THEME_VISUALS: ThemeVisual[] = [
   { key: "fart", label: "Fart", src: "/visuals/Fart.png", aliases: ["fart", "toot", "puff"] },
@@ -99,6 +153,8 @@ const THEME_VISUALS: ThemeVisual[] = [
   { key: "foot", label: "Foot", src: "/visuals/foot.png", aliases: ["foot", "feet"] },
   { key: "panties", label: "Panties", src: "/visuals/panties.png", aliases: ["panties"] }
 ];
+
+const TASK_VISUAL_SIZE = 36;
 
 const makeParentGateChallenge = (): ParentGateChallenge => {
   const left = 7 + Math.floor(Math.random() * 5);
@@ -229,6 +285,8 @@ const buildReviewExplanation = (
   };
 };
 
+const pickRandomLine = (items: string[]) => items[Math.floor(Math.random() * items.length)] ?? "";
+
 const buildReviewDetails = ({
   question,
   correct,
@@ -264,19 +322,14 @@ const buildReviewDetails = ({
   return detailParts.join("\n\n");
 };
 
-const getThemeVisuals = (question: QuestionDefinition) => {
-  const text = [
-    question.prompt,
-    question.supportText,
-    question.hint,
-    question.explanation.text
-  ]
-    .join(" ")
-    .toLowerCase();
-
-  return THEME_VISUALS.filter((visual) =>
-    visual.aliases.some((alias) => text.includes(alias))
-  ).slice(0, 4);
+const getAnswerFeedbackLine = (kind: "correct" | "retry" | "final-wrong") => {
+  if (kind === "correct") {
+    return pickRandomLine(CORRECT_FEEDBACK_LINES);
+  }
+  if (kind === "retry") {
+    return pickRandomLine(FIRST_WRONG_FEEDBACK_LINES);
+  }
+  return pickRandomLine(FINAL_WRONG_FEEDBACK_LINES);
 };
 
 const renderAudioBadge = (index: number) => String.fromCharCode(65 + index);
@@ -336,26 +389,55 @@ const InfoPanel = ({
   </div>
 );
 
-const ThemeVisualStrip = ({ question }: { question: QuestionDefinition }) => {
-  const visuals = getThemeVisuals(question);
+const resolveThemeVisual = (key: string) =>
+  THEME_VISUALS.find((visual) => visual.key === key || visual.aliases.includes(key.toLowerCase()));
 
-  if (visuals.length === 0) {
+const ThemeVisualToken = ({
+  visualKey,
+  label,
+  size = TASK_VISUAL_SIZE
+}: {
+  visualKey: string;
+  label: string;
+  size?: number;
+}) => {
+  const visual = resolveThemeVisual(visualKey);
+
+  if (!visual) {
+    return (
+      <span
+        className="theme-visual-fallback"
+        style={{ width: `${size}px`, height: `${size}px` }}
+        aria-label={label}
+      />
+    );
+  }
+
+  return (
+    <img
+      src={toAssetUrl(visual.src)}
+      alt={label}
+      className="theme-visual-image"
+      width={size}
+      height={size}
+      draggable={false}
+    />
+  );
+};
+
+const PromptCueVisual = ({ cue }: { cue: NonNullable<QuestionDefinition["presentation"]["promptCue"]> }) => {
+  if (cue.count <= 0) {
     return null;
   }
 
   return (
-    <div className="theme-visual-strip" aria-hidden="true">
-      {visuals.map((visual) => (
-        <div key={visual.key} className="theme-visual-chip">
-          <img
-            src={toAssetUrl(visual.src)}
-            alt={visual.label}
-            className="theme-visual-image"
-            width="42"
-            height="42"
-          />
-          <span>{visual.label}</span>
-        </div>
+    <div className="prompt-cue prompt-cue-visual">
+      {Array.from({ length: cue.count }, (_, index) => (
+        <ThemeVisualToken
+          key={`${cue.visualKey}-${index}`}
+          visualKey={cue.visualKey}
+          label={cue.visualKey}
+        />
       ))}
     </div>
   );
@@ -613,96 +695,81 @@ const FractionPreview = ({
 };
 
 const QuestionSupportVisual = ({ question }: { question: QuestionDefinition }) => {
-  const themedStrip = <ThemeVisualStrip question={question} />;
-
   if (question.graph) {
     return (
-      <div className="support-visual-stack">
-        {themedStrip}
-        <div className="graph-card">
-          {question.graph.bars.map((bar) => (
-            <div key={bar.label} className="graph-row">
-              <span>{bar.label}</span>
-              <div className="graph-bar-track">
-                <div className="graph-bar-fill" style={{ width: `${bar.value * 18}px`, background: bar.color }} />
-              </div>
-              <strong>{bar.value}</strong>
+      <div className="graph-card">
+        {question.graph.bars.map((bar) => (
+          <div key={bar.label} className="graph-row">
+            <span>{bar.label}</span>
+            <div className="graph-bar-track">
+              <div className="graph-bar-fill" style={{ width: `${bar.value * 18}px`, background: bar.color }} />
             </div>
-          ))}
-        </div>
+            <strong>{bar.value}</strong>
+          </div>
+        ))}
       </div>
     );
   }
 
   if (question.story) {
     return (
-      <div className="support-visual-stack">
-        {themedStrip}
-        <div className="story-card">
-          <strong>{question.story.scene}</strong>
-          <span>{question.story.equation}</span>
-        </div>
+      <div className="story-card">
+        <strong>{question.story.scene}</strong>
+        <span>{question.story.equation}</span>
       </div>
     );
   }
 
   if (question.coins) {
     return (
-      <div className="support-visual-stack">
-        {themedStrip}
-        <div className="coin-strip card-surface">
-          {question.coins.map((coin) => (
-            <div key={coin.id} className="coin-strip-item">
-              <CoinPreview kind={coin.kind} />
-            </div>
-          ))}
-        </div>
+      <div className="coin-strip card-surface">
+        {question.coins.map((coin) => (
+          <div key={coin.id} className="coin-strip-item">
+            <CoinPreview kind={coin.kind} />
+          </div>
+        ))}
       </div>
     );
   }
 
   if (question.arrayData) {
     return (
-      <div className="support-visual-stack">
-        {themedStrip}
-        <div
-          className="array-grid"
-          style={{ gridTemplateColumns: `repeat(${question.arrayData.columns}, minmax(0, 1fr))` }}
-        >
-          {Array.from({ length: question.arrayData.target }, (_, index) => (
-            <span key={index} className="array-token">
-              🧻
-            </span>
-          ))}
-        </div>
+      <div
+        className="array-grid"
+        style={{ gridTemplateColumns: `repeat(${question.arrayData.columns}, minmax(0, 1fr))` }}
+      >
+        {Array.from({ length: question.arrayData.target }, (_, index) => (
+          <span key={index} className="array-token">
+            <ThemeVisualToken visualKey="diaper" label="diaper" />
+          </span>
+        ))}
       </div>
     );
   }
 
   if (question.groups) {
     return (
-      <div className="support-visual-stack">
-        {themedStrip}
-        <div className={`group-visuals ${question.presentation.layout === "left-right" ? "group-visuals-left-right" : ""}`}>
-          {question.groups.map((group) => (
-            <div key={group.id} className="group-card">
-              <strong>{group.label}</strong>
-              <div className="token-cloud">
-                {Array.from({ length: Math.min(group.count, 24) }, (_, index) => (
-                  <span key={index} style={{ color: group.color }}>
-                    {group.token}
-                  </span>
-                ))}
-              </div>
-              <em>{group.count}</em>
+      <div className={`group-visuals ${question.presentation.layout === "left-right" ? "group-visuals-left-right" : ""}`}>
+        {question.groups.map((group) => (
+          <div key={group.id} className="group-card">
+            <strong>{group.label}</strong>
+            <div className="token-cloud">
+              {Array.from({ length: Math.min(group.count, 24) }, (_, index) => (
+                <ThemeVisualToken
+                  key={`${group.id}-${index}`}
+                  visualKey={group.token}
+                  label={group.label ?? group.token}
+                />
+              ))}
             </div>
-          ))}
-        </div>
+            <em>{group.count}</em>
+          </div>
+        ))}
       </div>
     );
   }
 
-  return themedStrip;
+  return null;
 };
 
 const ChoiceCardBody = ({
@@ -842,7 +909,7 @@ const CountTapActivity = ({
             }
             disabled={disabled}
           >
-            <span>{question.countTap?.token ?? "💩"}</span>
+            <ThemeVisualToken visualKey={question.countTap?.token ?? "poop"} label="count token" />
           </button>
         ))}
       </div>
@@ -911,7 +978,7 @@ const FillTenFrameActivity = ({
                 )
               }
             >
-              {selected ? "🚽" : ""}
+              {selected ? <ThemeVisualToken visualKey="toilet" label="toilet" /> : null}
             </button>
           );
         })}
@@ -1338,7 +1405,6 @@ const ReviewCard = ({
 const TaskScreen = ({
   task,
   hintVisible,
-  retryState,
   reviewState,
   ttsEnabled,
   onSubmitAnswer,
@@ -1353,7 +1419,6 @@ const TaskScreen = ({
 }: {
   task: SessionTask;
   hintVisible: boolean;
-  retryState: TaskAttemptState;
   reviewState: ReviewState | null;
   ttsEnabled: boolean;
   onSubmitAnswer: (choiceId: string) => void;
@@ -1388,7 +1453,7 @@ const TaskScreen = ({
             {task.focusLabel ? <MiniBadge text={task.focusLabel} tone="blue" /> : null}
           </div>
           <h2>{instruction.title}</h2>
-          {instruction.cue ? <div className="prompt-cue">{instruction.cue}</div> : null}
+          {instruction.cue ? <PromptCueVisual cue={instruction.cue} /> : null}
         </div>
         <SpeakerButton label="Read instruction" onSpeak={onSpeakInstruction} disabled={!ttsEnabled} />
       </header>
@@ -1420,9 +1485,6 @@ const TaskScreen = ({
             onSpeak={onSpeakHint}
             ttsEnabled={ttsEnabled}
           />
-          {retryState.retryReady && retryState.promptText ? (
-            <InfoPanel title="Try one more time" text={retryState.promptText} ttsEnabled={ttsEnabled} />
-          ) : null}
           <QuestionSupportVisual question={task.question} />
           {task.question.choices.length > 0 ? (
             <SectionWithAudio title="Answer choices" onSpeak={onSpeakChoices} ttsEnabled={ttsEnabled} />
@@ -1431,13 +1493,6 @@ const TaskScreen = ({
         </div>
       ) : (
         <>
-          {supportsHints && retryState.retryReady && retryState.promptText ? (
-            <InfoPanel
-              title="Try one more time"
-              text={retryState.promptText}
-              ttsEnabled={ttsEnabled}
-            />
-          ) : null}
           {hintVisible ? (
             <InfoPanel
               title="Hint"
@@ -1485,8 +1540,7 @@ export default function App() {
   const [parentGateInput, setParentGateInput] = useState("");
   const [parentDetails, setParentDetails] = useState<ParentDetailsState | null>(null);
   const [taskAttemptState, setTaskAttemptState] = useState<TaskAttemptState>({
-    attemptsUsed: 0,
-    retryReady: false
+    attemptsUsed: 0
   });
   const [reviewState, setReviewState] = useState<ReviewState | null>(null);
   const [reviewDetailOpen, setReviewDetailOpen] = useState(false);
@@ -1530,8 +1584,7 @@ export default function App() {
     setTaskShownAt(Date.now());
     setHintVisible(false);
     setTaskAttemptState({
-      attemptsUsed: 0,
-      retryReady: false
+      attemptsUsed: 0
     });
     setReviewState(null);
     setReviewDetailOpen(false);
@@ -1555,11 +1608,11 @@ export default function App() {
     }));
   };
 
-  const playAnswerFeedback = (correct: boolean) => {
+  const playAnswerFeedback = (text: string) => {
     fartAudio.play();
     speech.speak({
       channel: "feedback",
-      text: correct ? CORRECT_FEEDBACK_SPEECH : WRONG_FEEDBACK_SPEECH,
+      text,
       delayMs: 110
     });
   };
@@ -1571,8 +1624,7 @@ export default function App() {
     setSession(null);
     setReviewState(null);
     setTaskAttemptState({
-      attemptsUsed: 0,
-      retryReady: false
+      attemptsUsed: 0
     });
     setReviewDetailOpen(false);
     setParentDetails(null);
@@ -1642,15 +1694,16 @@ export default function App() {
     };
 
     const explanation = buildReviewExplanation(currentPlacementProbe.question, correct, suspiciousFast);
-    playAnswerFeedback(correct);
+    const feedbackLine = getAnswerFeedbackLine(correct ? "correct" : "final-wrong");
+    playAnswerFeedback(feedbackLine);
 
     if (nextPlacement.probeIndex >= nextPlacement.probes.length) {
       const placedProfile = applyPlacementResults(activeChild, nextPlacement.scoresByStrand);
       setReviewState({
         scope: "placement",
         correct,
-        feedbackText: correct ? "Nice thinking." : "We learned something helpful.",
-        feedbackSpeech: correct ? CORRECT_FEEDBACK_SPEECH : WRONG_FEEDBACK_SPEECH,
+        feedbackText: feedbackLine,
+        feedbackSpeech: feedbackLine,
         explanationText: explanation.text,
         explanationSpeech: explanation.speech,
         nextScreen: "dashboard",
@@ -1664,8 +1717,8 @@ export default function App() {
     setReviewState({
       scope: "placement",
       correct,
-      feedbackText: correct ? "Nice thinking." : "That one was tricky.",
-      feedbackSpeech: correct ? CORRECT_FEEDBACK_SPEECH : WRONG_FEEDBACK_SPEECH,
+      feedbackText: feedbackLine,
+      feedbackSpeech: feedbackLine,
       explanationText: explanation.text,
       explanationSpeech: explanation.speech,
       nextScreen: "placement",
@@ -1703,23 +1756,14 @@ export default function App() {
     const firstTryCorrect = taskAttemptState.attemptsUsed === 0;
     const canRetry = currentTask.mode === "example" || currentTask.mode === "practice";
 
-    playAnswerFeedback(correct);
-
     if (!correct && canRetry && firstTryCorrect) {
+      const retryFeedback = getAnswerFeedbackLine("retry");
+      playAnswerFeedback(retryFeedback);
       setTaskAttemptState({
-        attemptsUsed: 1,
-        retryReady: true,
-        promptText:
-          currentTask.mode === "example"
-            ? "Look at the clue and try this lesson point one more time."
-            : "Use the hint and try this practice one more time."
+        attemptsUsed: 1
       });
       setHintVisible(true);
-      setFeedback(
-        currentTask.mode === "example"
-          ? "Lesson point stays open for one more try."
-          : "Hint opened. Try the practice question once more."
-      );
+      setFeedback(retryFeedback);
       answerLockedRef.current = false;
       return;
     }
@@ -1753,12 +1797,14 @@ export default function App() {
     }
 
     const explanation = buildReviewExplanation(currentTask.question, correct, suspiciousFast);
+    const feedbackLine = getAnswerFeedbackLine(correct ? "correct" : "final-wrong");
+    playAnswerFeedback(feedbackLine);
 
     setReviewState({
       scope: "practice",
       correct,
-      feedbackText: correct ? "Correct!" : "Let's look at the answer together.",
-      feedbackSpeech: correct ? CORRECT_FEEDBACK_SPEECH : WRONG_FEEDBACK_SPEECH,
+      feedbackText: feedbackLine,
+      feedbackSpeech: feedbackLine,
       explanationText: explanation.text,
       explanationSpeech: explanation.speech,
       noteText:
@@ -2210,7 +2256,6 @@ export default function App() {
               level: currentPlacementProbe.level
             }}
             hintVisible={false}
-            retryState={{ attemptsUsed: 0, retryReady: false }}
             reviewState={reviewState}
             ttsEnabled={persistedState.settings.ttsEnabled}
             onSubmitAnswer={handlePlacementAnswer}
@@ -2243,7 +2288,6 @@ export default function App() {
             key={currentTask.question.id}
             task={currentTask}
             hintVisible={hintVisible}
-            retryState={taskAttemptState}
             reviewState={reviewState}
             ttsEnabled={persistedState.settings.ttsEnabled}
             onSubmitAnswer={handleSessionAnswer}

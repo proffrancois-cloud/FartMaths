@@ -22,6 +22,7 @@
 
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html,
@@ -36,6 +37,8 @@ body {
     radial-gradient(circle at top left, rgba(132, 245, 170, 0.18), transparent 28%),
     radial-gradient(circle at top right, rgba(255, 204, 137, 0.18), transparent 32%),
     linear-gradient(180deg, #173726 0%, #214c39 100%);
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
 }
 
 button,
@@ -43,8 +46,14 @@ input {
   font: inherit;
 }
 
+img {
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
 button {
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .app-shell {
@@ -371,7 +380,6 @@ button {
 .hero-insight-card,
 .lesson-point-panel,
 .avatar-picker-section,
-.support-visual-stack,
 .review-detail-text {
   display: grid;
   gap: 14px;
@@ -537,7 +545,7 @@ button {
   flex-wrap: wrap;
   justify-content: center;
   gap: 6px;
-  font-size: 1.45rem;
+  min-height: 42px;
 }
 
 .choice-grid {
@@ -568,32 +576,18 @@ button {
   gap: 4px;
 }
 
-.theme-visual-strip {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.theme-visual-chip {
-  display: inline-grid;
-  justify-items: center;
-  gap: 6px;
-  min-width: 76px;
-  padding: 8px 10px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.72);
-  text-align: center;
-}
-
-.theme-visual-chip span {
-  font-size: 0.8rem;
-  color: var(--text-soft);
-}
-
 .theme-visual-image {
-  width: 42px;
-  height: 42px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.theme-visual-fallback {
+  display: inline-block;
+  border-radius: 12px;
+  background: rgba(19, 36, 52, 0.08);
 }
 
 .ten-frame {
@@ -633,7 +627,6 @@ button {
   place-items: center;
   border-radius: 14px;
   background: rgba(156, 240, 239, 0.3);
-  font-size: 1.45rem;
 }
 
 .number-line-card,
@@ -844,6 +837,11 @@ select:disabled {
 
 select {
   font: inherit;
+  font-size: 16px;
+}
+
+input {
+  font-size: 16px;
 }
 
 .card-surface {
@@ -903,16 +901,20 @@ select {
 }
 
 .prompt-cue {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
   min-height: 52px;
-  min-width: 52px;
   margin-top: 10px;
   padding: 8px 14px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.72);
-  font-size: 1.4rem;
+}
+
+.prompt-cue-visual {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .choice-grid.choice-grid-standard {
@@ -1170,6 +1172,7 @@ select {
   border-radius: 22px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(236, 255, 239, 0.88));
   padding: 12px;
+  touch-action: none;
 }
 
 .drag-token-hidden {

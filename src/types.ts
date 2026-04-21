@@ -219,7 +219,12 @@ export interface QuestionPresentation {
   instructionVisibility: InstructionVisibility;
   choiceVisibility: ChoiceVisibility;
   layout: LayoutMode;
-  promptCue?: string;
+  promptCue?: PromptCueData;
+}
+
+export interface PromptCueData {
+  visualKey: string;
+  count: number;
 }
 
 export interface DragTarget {
