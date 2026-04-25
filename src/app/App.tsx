@@ -632,6 +632,22 @@ const ShapePreview = ({ shape }: { shape: ShapeKind }) => {
     );
   }
 
+  if (shape === "quadrilateral") {
+    return (
+      <svg viewBox="0 0 100 100" className="shape-svg" aria-hidden="true">
+        <polygon points="24,28 76,20 84,68 32,78" fill="#ffa9d7" stroke="#9e3a78" strokeWidth="5" />
+      </svg>
+    );
+  }
+
+  if (shape === "pentagon") {
+    return (
+      <svg viewBox="0 0 100 100" className="shape-svg" aria-hidden="true">
+        <polygon points="50,16 80,38 68,78 32,78 20,38" fill="#ffe07a" stroke="#9a7419" strokeWidth="5" />
+      </svg>
+    );
+  }
+
   return (
     <svg viewBox="0 0 100 100" className="shape-svg" aria-hidden="true">
       <polygon
@@ -696,6 +712,23 @@ const FractionPreview = ({
 
 const QuestionSupportVisual = ({ question }: { question: QuestionDefinition }) => {
   if (question.graph) {
+    if (question.graph.graphKind === "line-plot") {
+      return (
+        <div className="graph-card line-plot-card">
+          {question.graph.bars.map((bar) => (
+            <div key={bar.label} className="line-plot-row">
+              <span>{bar.label}</span>
+              <div className="line-plot-dots" aria-label={`${bar.value} measurements`}>
+                {Array.from({ length: bar.value }, (_, index) => (
+                  <i key={`${bar.label}-${index}`} style={{ background: bar.color }} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
     return (
       <div className="graph-card">
         {question.graph.bars.map((bar) => (

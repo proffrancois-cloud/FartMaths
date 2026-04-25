@@ -678,6 +678,28 @@ button {
   border-radius: inherit;
 }
 
+.line-plot-row {
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.line-plot-dots {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 3px solid rgba(19, 36, 52, 0.18);
+}
+
+.line-plot-dots i {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.12);
+}
+
 .clock-grid {
   grid-template-columns: repeat(2, 1fr);
 }

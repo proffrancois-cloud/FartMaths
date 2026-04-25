@@ -232,6 +232,7 @@ export interface GraphBar {
 }
 
 export interface GraphData {
+  graphKind?: "bar-graph" | "picture-graph" | "line-plot";
   bars: GraphBar[];
   question: string;
 }
@@ -253,6 +254,7 @@ export interface CountTapData {
   total: number;
   token: string;
   color: string;
+  layout?: "arranged" | "scattered" | "line" | "array" | "circle";
 }
 
 export interface ArrayData {

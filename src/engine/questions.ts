@@ -233,6 +233,56 @@ const buildBase = (
   explanation: config.explanation
 });
 
+const hasStandard = (skill: SkillDefinition, code: string) =>
+  skill.ccssCodes.includes(code);
+
+const hasAnyStandard = (skill: SkillDefinition, codes: string[]) =>
+  codes.some((code) => hasStandard(skill, code));
+
+const getMaxNumber = (skill: SkillDefinition, fallback: number) =>
+  skill.constraints?.maxNumber ?? fallback;
+
+const getMaxObjects = (skill: SkillDefinition, fallback: number) =>
+  skill.constraints?.maxObjects ?? skill.constraints?.maxNumber ?? fallback;
+
+const getMaxCategories = (skill: SkillDefinition, fallback: number) =>
+  skill.constraints?.maxCategories ?? fallback;
+
+const getAllowedCoinKinds = (skill: SkillDefinition, fallback: CoinKind[]) =>
+  skill.constraints?.allowedCoins ?? fallback;
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+const equationChoices = (correct: boolean): AnswerChoice[] => [
+  {
+    id: correct ? "choice-true" : "choice-false",
+    label: correct ? "True" : "False",
+    speechLabel: correct ? "True" : "False",
+    value: correct ? "true" : "false",
+    renderKind: "text"
+  },
+  {
+    id: correct ? "choice-false" : "choice-true",
+    label: correct ? "False" : "True",
+    speechLabel: correct ? "False" : "True",
+    value: correct ? "false" : "true",
+    renderKind: "text"
+  }
+];
+
+const moneyLabel = (cents: number) =>
+  cents >= 100 && cents % 100 === 0 ? `$${cents / 100}` : `${cents}¢`;
+
+const moneyChoices = (correct: number): AnswerChoice[] =>
+  uniqueNumbers(correct, 4, 0, Math.max(100, correct + 50)).map((value) => ({
+    id: `choice-${value}`,
+    label: moneyLabel(value),
+    speechLabel: moneyLabel(value),
+    value,
+    renderKind: "text"
+  }));
+
 const shapeChoice = (shape: ShapeKind, idPrefix = "shape"): AnswerChoice => ({
   id: `${idPrefix}-${shape}`,
   label: shape,
@@ -285,8 +335,9 @@ const buildPromptToZoneDrag = (
 });
 
 const numberRecognitionQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
-  const max = [5, 10, 20, 30, 50, 100, 120, 150, 500, 1000][skill.level - 1];
-  const target = skill.level <= 3 ? rand(0, max) : sample([rand(0, max), sample([10, 20, 30, 40, 50, 60, 70, 80, 90])]);
+  const max = getMaxNumber(skill, [5, 10, 20, 30, 50, 100, 120, 150, 500, 1000][skill.level - 1]);
+  const tensOptions = [10, 20, 30, 40, 50, 60, 70, 80, 90].filter((value) => value <= max);
+  const target = skill.level <= 3 ? rand(0, max) : sample([rand(0, max), sample(tensOptions.length ? tensOptions : [max])]);
   const word = numberToWords(target);
   const counter = sample(themeCounters);
   const instructionVisibility = promptVariant(skill, target);
@@ -318,7 +369,21 @@ const numberRecognitionQuestion = (skill: SkillDefinition, mode: TeachingMode): 
 };
 
 const cardinalityQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
-  const max = [3, 5, 10, 12, 15, 18, 20, 24, 30, 40][skill.level - 1];
+  const allowedLayouts = skill.constraints?.allowedLayouts ?? [];
+  const layout =
+    skill.constraints?.layoutConstraint === "arranged-or-scattered"
+      ? sample(["scattered", "line", "array", "circle"] as const)
+      : skill.constraints?.layoutConstraint === "arranged"
+        ? sample(["line", "array", "circle"] as const)
+        : skill.constraints?.layoutConstraint === "scattered"
+          ? "scattered"
+          : allowedLayouts.includes("scattered")
+            ? "scattered"
+            : "array";
+  const fallbackMax = [3, 5, 10, 12, 15, 18, 20, 24, 30, 40][skill.level - 1];
+  const max = hasStandard(skill, "K.CC.B.5") && layout === "scattered"
+    ? Math.min(10, getMaxObjects(skill, fallbackMax))
+    : getMaxObjects(skill, fallbackMax);
   const total = rand(Math.max(1, max - 3), max);
   const counter = sample(themeCounters);
   return {
@@ -337,12 +402,43 @@ const cardinalityQuestion = (skill: SkillDefinition, mode: TeachingMode): Questi
     countTap: {
       total,
       token: counter.token,
-      color: "#7ed89f"
+      color: "#7ed89f",
+      layout
     }
   };
 };
 
 const comparingQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
+  if (hasStandard(skill, "2.MD.B.6")) {
+    const target = rand(4, 20);
+    return {
+      ...buildBase(skill, mode, {
+        prompt: `Tap the point that shows a stink worm ${numberToWords(target)} units long from zero.`,
+        speech: `Tap the point that shows a stink worm ${numberToWords(target)} units long from zero.`,
+        hint: "Start at zero and count the length hops to the end point.",
+        explanation: makeExplanation(
+          `A length of ${target} units from zero ends at ${target} on the number line.`,
+          String(target)
+        ),
+        activityType: "number-line-tap"
+      }),
+      choices: Array.from({ length: 21 }, (_, value) => ({
+        id: `choice-${value}`,
+        label: String(value),
+        speechLabel: numberToWords(value),
+        value,
+        renderKind: "number" as const
+      })),
+      correctChoiceId: `choice-${target}`,
+      numberLine: {
+        start: 0,
+        end: 20,
+        target,
+        jump: target
+      }
+    };
+  }
+
   const max = [3, 10, 10, 20, 20, 99, 100, 120, 999, 999][skill.level - 1];
   const values = uniqueValues(2, 1, max);
   const left = values[0];
@@ -385,7 +481,7 @@ const comparingQuestion = (skill: SkillDefinition, mode: TeachingMode): Question
 };
 
 const additionSubtractionQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
-  const limit = [3, 5, 10, 10, 20, 20, 100, 100, 100, 1000][skill.level - 1];
+  const limit = getMaxNumber(skill, [3, 5, 10, 10, 20, 20, 100, 100, 100, 1000][skill.level - 1]);
 
   if (skill.level === 4) {
     const filled = rand(1, 7);
@@ -410,6 +506,103 @@ const additionSubtractionQuestion = (skill: SkillDefinition, mode: TeachingMode)
     };
   }
 
+  if (hasStandard(skill, "1.OA.B.3") && Math.random() < 0.35) {
+    const first = rand(2, 9);
+    const second = rand(2, Math.min(9, 20 - first));
+    const total = first + second;
+    const prompt = `Which turn-around fart fact makes the same total as ${first} + ${second}?`;
+    const correct = `${second} + ${first}`;
+    const choices = textChoices(correct, [
+      correct,
+      `${first} + ${Math.max(1, second - 1)}`,
+      `${total} - ${first}`,
+      `${first} + ${second + 2}`
+    ]);
+
+    return {
+      ...buildBase(skill, mode, {
+        prompt,
+        speech: prompt,
+        hint: "You can add numbers in either order and the total stays the same.",
+        explanation: makeExplanation(
+          `${first} + ${second} and ${second} + ${first} both make ${total}.`,
+          correct
+        ),
+        activityType: "choose-the-answer"
+      }),
+      choices,
+      correctChoiceId: `correct-${correct}`
+    };
+  }
+
+  if (hasStandard(skill, "1.OA.A.2")) {
+    const first = rand(1, 8);
+    const second = rand(1, 8);
+    const third = rand(1, Math.max(1, 20 - first - second));
+    const result = first + second + third;
+    const prompt = `Three stink piles join: ${first} + ${second} + ${third}. How many altogether?`;
+
+    return {
+      ...buildBase(skill, mode, {
+        prompt,
+        speech: prompt,
+        hint: "Add two piles first, then add the last pile.",
+        explanation: makeExplanation(
+          `${first} + ${second} + ${third} equals ${result}.`,
+          String(result)
+        ),
+        activityType: "choose-the-answer"
+      }),
+      choices: numberChoices(result, Math.max(0, result - 5), 20),
+      correctChoiceId: `choice-${result}`
+    };
+  }
+
+  if (hasStandard(skill, "1.OA.D.7")) {
+    const leftA = rand(2, 10);
+    const leftB = rand(1, 10);
+    const leftTotal = leftA + leftB;
+    const isTrue = Math.random() > 0.45;
+    const rightTotal = isTrue ? leftTotal : clamp(leftTotal + sample([-2, -1, 1, 2]), 1, 20);
+    const prompt = `Is this toilet equation true or false: ${leftA} + ${leftB} = ${rightTotal}?`;
+
+    return {
+      ...buildBase(skill, mode, {
+        prompt,
+        speech: prompt,
+        hint: "The equal sign means both sides have the same value.",
+        explanation: makeExplanation(
+          `${leftA} + ${leftB} makes ${leftTotal}, so the equation is ${isTrue ? "true" : "false"}.`,
+          isTrue ? "True" : "False"
+        ),
+        activityType: "choose-the-answer"
+      }),
+      choices: equationChoices(isTrue),
+      correctChoiceId: isTrue ? "choice-true" : "choice-false"
+    };
+  }
+
+  if (hasStandard(skill, "2.NBT.B.6")) {
+    const addends = Array.from({ length: rand(3, 4) }, () => rand(10, 49));
+    const result = addends.reduce((sum, value) => sum + value, 0);
+    const prompt = `Add these two-digit stink numbers: ${addends.join(" + ")}.`;
+
+    return {
+      ...buildBase(skill, mode, {
+        prompt,
+        speech: prompt,
+        hint: "Add the ones, then the tens. You can make groups of ten when the ones pile gets big.",
+        explanation: makeExplanation(
+          `${addends.join(" + ")} equals ${result}.`,
+          String(result)
+        ),
+        activityType: "choose-the-answer"
+      }),
+      choices: numberChoices(result, Math.max(0, result - 12), result + 12),
+      correctChoiceId: `choice-${result}`
+    };
+  }
+
   const isSubtraction = skill.level >= 3 && Math.random() > 0.45;
   const addendA = rand(1, Math.max(2, Math.floor(limit * 0.7)));
   const addendB = isSubtraction
@@ -430,7 +623,7 @@ const additionSubtractionQuestion = (skill: SkillDefinition, mode: TeachingMode)
     : `${addendA} ${counter.plural} plus ${addendB} more makes ${result}.`;
 
   if (skill.level >= 6) {
-    const start = isSubtraction ? addendA : Math.max(0, addendA - 2);
+    const start = isSubtraction ? Math.max(0, result - 2) : Math.max(0, addendA - 2);
     const end = Math.max(result + 5, addendA + addendB + 3, 12);
     return {
       ...buildBase(skill, mode, {
@@ -494,10 +687,16 @@ const additionSubtractionQuestion = (skill: SkillDefinition, mode: TeachingMode)
   };
 
 const placeValueQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
-  const hundreds = skill.level >= 8 ? rand(0, Math.min(3, skill.level - 6)) : 0;
-  const tens = skill.level >= 2 ? rand(1, skill.level >= 8 ? 9 : 5) : 0;
-  const ones = rand(0, skill.level >= 5 ? 9 : 5);
-  const target = hundreds * 100 + tens * 10 + ones;
+  const max = getMaxNumber(skill, skill.level >= 8 ? 1000 : skill.level >= 4 ? 100 : 19);
+  const target =
+    max >= 1000
+      ? rand(100, 1000)
+      : max >= 100
+        ? rand(10, 99)
+        : rand(skill.level <= 1 ? 0 : 10, max);
+  const hundreds = Math.floor(target / 100);
+  const tens = Math.floor((target % 100) / 10);
+  const ones = target % 10;
 
   return {
     ...buildBase(skill, mode, {
@@ -528,20 +727,78 @@ const placeValueQuestion = (skill: SkillDefinition, mode: TeachingMode): Questio
 };
 
 const wordProblemQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
-  const start = rand(3, skill.level >= 6 ? 40 : 12);
-  const change = rand(1, Math.max(2, Math.floor(start / 2)));
-  const isAddition = Math.random() > 0.5;
-  const answer = isAddition ? start + change : start - Math.min(change, start);
-  const action = isAddition ? "more rolled in" : "rolled away";
-  const equation = isAddition ? `${start} + ${change}` : `${start} - ${Math.min(change, start)}`;
-  const scene = `A poop monster had ${start} poopy diapers. Then ${change} ${action}.`;
-  const prompt = `${scene} How many are there now?`;
+  const max = getMaxNumber(skill, skill.gradeBand === "G2" ? 100 : skill.gradeBand === "G1" ? 20 : 10);
+  const problemTypes = skill.constraints?.allowedProblemTypes ?? ["add-to", "take-from"];
+  const problemType = sample(problemTypes);
+  const unknownPosition = skill.constraints?.unknownPosition ?? (skill.level >= 5 ? sample(["result", "change", "start"] as const) : "result");
+
+  let scene = "";
+  let equation = "";
+  let answer = 0;
+
+  if (hasStandard(skill, "2.OA.A.1") && skill.level >= 8) {
+    const first = rand(10, 45);
+    const second = rand(5, 25);
+    const third = rand(3, 20);
+    answer = clamp(first + second - third, 0, max);
+    scene = `A toilet parade had ${first} rolls. ${second} more rolled in, then ${third} rolled away.`;
+    equation = `${first} + ${second} - ${third}`;
+  } else if (problemType === "compare") {
+    const bigger = rand(5, max);
+    const smaller = rand(1, bigger - 1);
+    answer = bigger - smaller;
+    scene = `The left stink worm is ${bigger} units long. The right stink worm is ${smaller} units long.`;
+    equation = `${bigger} - ${smaller}`;
+  } else if (problemType === "put-together" || problemType === "take-apart") {
+    const first = rand(1, Math.max(2, Math.floor(max / 2)));
+    const second = rand(1, Math.max(2, max - first));
+    answer = unknownPosition === "change" ? second : first + second;
+    scene =
+      unknownPosition === "change"
+        ? `A potty box has ${first + second} silly stickers. ${first} are fart stickers.`
+        : `A potty box has ${first} fart stickers and ${second} poop stickers.`;
+    equation = unknownPosition === "change" ? `${first} + ? = ${first + second}` : `${first} + ${second}`;
+  } else if (problemType === "take-from") {
+    const start = rand(3, max);
+    const change = rand(1, Math.max(1, Math.floor(start / 2)));
+    answer = unknownPosition === "start" ? start : unknownPosition === "change" ? change : start - change;
+    scene =
+      unknownPosition === "start"
+        ? `Some poopy diapers were in a pile. ${change} rolled away and ${start - change} were left.`
+        : unknownPosition === "change"
+          ? `A poop monster had ${start} poopy diapers. Some rolled away and ${start - change} were left.`
+          : `A poop monster had ${start} poopy diapers. Then ${change} rolled away.`;
+    equation =
+      unknownPosition === "start"
+        ? `? - ${change} = ${start - change}`
+        : unknownPosition === "change"
+          ? `${start} - ? = ${start - change}`
+          : `${start} - ${change}`;
+  } else {
+    const start = rand(1, Math.max(2, Math.floor(max * 0.7)));
+    const change = rand(1, Math.max(1, max - start));
+    answer = unknownPosition === "start" ? start : unknownPosition === "change" ? change : start + change;
+    scene =
+      unknownPosition === "start"
+        ? `Some fart clouds floated by. ${change} more joined, and then there were ${start + change}.`
+        : unknownPosition === "change"
+          ? `${start} fart clouds floated by. Some more joined, and then there were ${start + change}.`
+          : `${start} fart clouds floated by. Then ${change} more joined.`;
+    equation =
+      unknownPosition === "start"
+        ? `? + ${change} = ${start + change}`
+        : unknownPosition === "change"
+          ? `${start} + ? = ${start + change}`
+          : `${start} + ${change}`;
+  }
+
+  const prompt = `${scene} What number solves the story?`;
 
   return {
     ...buildBase(skill, mode, {
       prompt,
       speech: prompt,
-      hint: "Look at whether more poopy diapers joined or some went away.",
+      hint: "Listen for whether things joined, went away, were compared, or were split apart.",
       explanation: makeExplanation(
         `${equation} equals ${answer}.`,
         String(answer)
@@ -558,6 +815,64 @@ const wordProblemQuestion = (skill: SkillDefinition, mode: TeachingMode): Questi
 };
 
 const measurementQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
+  if (hasStandard(skill, "1.MD.A.1")) {
+    const labels = ["Left worm", "Middle worm", "Right worm"];
+    const lengths = uniqueValues(3, 3, 12).sort((left, right) => left - right);
+    const shuffled = shuffle(labels.map((label, index) => ({ label, length: lengths[index] })));
+    const longest = [...shuffled].sort((left, right) => right.length - left.length)[0];
+    const prompt = "Order the stink worms in your head. Which worm is longest?";
+
+    return {
+      ...buildBase(skill, mode, {
+        prompt,
+        speech: prompt,
+        hint: "Compare two worms, then use that to compare with the third worm.",
+        explanation: makeExplanation(
+          `${longest.label} is longest at ${longest.length} units.`,
+          longest.label
+        ),
+        activityType: "choose-the-answer"
+      }),
+      choices: shuffled.map((item) => ({
+        id: `choice-${item.label}`,
+        label: item.label,
+        speechLabel: item.label,
+        value: item.label,
+        renderKind: "text"
+      })),
+      correctChoiceId: `choice-${longest.label}`,
+      groups: shuffled.map((item) => ({
+        id: randomId(),
+        count: item.length,
+        token: "foot",
+        color: "#8bc5ff",
+        label: item.label
+      }))
+    };
+  }
+
+  if (hasStandard(skill, "2.MD.A.2")) {
+    const bigUnits = rand(3, 7);
+    const smallUnits = bigUnits * 2;
+    const prompt = `The same toilet-paper worm is ${bigUnits} big units long or ${smallUnits} tiny units long. Which unit is shorter?`;
+
+    return {
+      ...buildBase(skill, mode, {
+        prompt,
+        speech: prompt,
+        hint: "More units fit along the same object when each unit is shorter.",
+        explanation: makeExplanation(
+          `The tiny unit is shorter because it takes ${smallUnits} tiny units but only ${bigUnits} big units to cover the same length.`,
+          "Tiny unit"
+        ),
+        activityType: "choose-the-answer"
+      }),
+      choices: textChoices("Tiny unit", ["Tiny unit", "Big unit", "Same unit", "No unit"]),
+      correctChoiceId: "correct-Tiny unit",
+      groups: groupsFromCounts(bigUnits, smallUnits, "Big units", "Tiny units", "foot")
+    };
+  }
+
   const lengths = uniqueValues(2, 2, 12 + skill.level);
   const left = lengths[0];
   const right = lengths[1];
@@ -615,15 +930,23 @@ const measurementQuestion = (skill: SkillDefinition, mode: TeachingMode): Questi
 };
 
 const timeQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
+  const increment = skill.constraints?.timeMinuteIncrement;
   const minutePool =
-    skill.level <= 2
+    increment === 60
       ? [0]
-      : skill.level <= 4
+      : increment === 30
         ? [0, 30]
-        : [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+        : increment === 5
+          ? [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+          : skill.level <= 2
+            ? [0]
+            : skill.level <= 4
+              ? [0, 30]
+              : [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
   const hour = rand(1, 12);
   const minute = sample(minutePool);
-  const label = `${hour}:${String(minute).padStart(2, "0")}`;
+  const dayPart = skill.constraints?.requireAmPm ? sample(["a.m.", "p.m."] as const) : "";
+  const label = `${hour}:${String(minute).padStart(2, "0")}${dayPart ? ` ${dayPart}` : ""}`;
   const spoken = describeTime(hour, minute);
   const choices = new Map<string, ClockChoiceData>();
   choices.set(label, { targetHour: hour, targetMinute: minute, label });
@@ -631,7 +954,8 @@ const timeQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefin
   while (choices.size < 4) {
     const maybeHour = rand(1, 12);
     const maybeMinute = sample(minutePool);
-    const maybeLabel = `${maybeHour}:${String(maybeMinute).padStart(2, "0")}`;
+    const maybeDayPart = skill.constraints?.requireAmPm ? sample(["a.m.", "p.m."] as const) : "";
+    const maybeLabel = `${maybeHour}:${String(maybeMinute).padStart(2, "0")}${maybeDayPart ? ` ${maybeDayPart}` : ""}`;
     choices.set(maybeLabel, {
       targetHour: maybeHour,
       targetMinute: maybeMinute,
@@ -646,8 +970,8 @@ const timeQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefin
       prompt:
         promptVariant(skill, minute) === "audio-only"
           ? "Listen and tap the matching clock."
-          : `Tap the clock for potty time: ${spoken}.`,
-      speech: `Tap the clock for potty time: ${spoken}.`,
+          : `Tap the clock for potty time: ${spoken}${dayPart ? ` ${dayPart}` : ""}.`,
+      speech: `Tap the clock for potty time: ${spoken}${dayPart ? ` ${dayPart}` : ""}.`,
       hint: "Look at the short hand first. Then check the long hand for potty time.",
       explanation: makeExplanation(
         `The correct clock shows ${label}.`,
@@ -670,11 +994,11 @@ const timeQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefin
 };
 
 const moneyQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
-  const coinKinds: CoinKind[] = ["penny", "nickel", "dime", "quarter"];
+  const coinKinds = getAllowedCoinKinds(skill, ["penny", "nickel", "dime", "quarter"]);
 
   if (skill.level <= 3) {
     const targetKind = sample(coinKinds);
-    const choiceKinds = shuffle(coinKinds).slice(0, 4);
+    const choiceKinds = shuffle([...new Set(coinKinds)]).slice(0, 4);
     if (!choiceKinds.includes(targetKind)) {
       choiceKinds[0] = targetKind;
     }
@@ -695,7 +1019,7 @@ const moneyQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefi
         speech: `Tap the ${coinLibrary[targetKind].label.toLowerCase()} coin for the potty shop.`,
         hint: "Look at the coin name and size.",
         explanation: makeExplanation(
-          `The ${coinLibrary[targetKind].label.toLowerCase()} is worth ${coinLibrary[targetKind].value} cents.`,
+          `The ${coinLibrary[targetKind].label.toLowerCase()} is worth ${moneyLabel(coinLibrary[targetKind].value)}.`,
           coinLibrary[targetKind].label
         ),
         activityType: "choose-the-answer"
@@ -718,19 +1042,58 @@ const moneyQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefi
       speech: "Count the potty-shop coins. How much money is here?",
       hint: "Add each coin's value carefully to buy the potty supplies.",
       explanation: makeExplanation(
-        `The coins add up to ${total} cents.`,
-        `${total} cents`
+        `The coins add up to ${moneyLabel(total)}.`,
+        moneyLabel(total)
       ),
       activityType: "coin-counting"
     }),
-    choices: numberChoices(total, 0, Math.max(50, total + 20)),
+    choices: moneyChoices(total),
     correctChoiceId: `choice-${total}`,
     coins
   };
 };
 
 const graphQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
-  const labels = ["Corn", "Beans", "Toast", "Apples"];
+  if (hasStandard(skill, "2.MD.D.9")) {
+    const labels = ["1 in", "2 in", "3 in", "4 in"];
+    const values = labels.map(() => rand(1, 4));
+    const bars: GraphBar[] = labels.map((label, index) => ({
+      label,
+      value: values[index],
+      color: ["#7ed89f", "#7dc6ff", "#ffbc67", "#ff8cb1"][index]
+    }));
+    const winningBar = [...bars].sort((left, right) => right.value - left.value)[0];
+
+    return {
+      ...buildBase(skill, mode, {
+        prompt: "Look at the toilet-paper line plot. Which length happened most?",
+        speech: "Look at the toilet-paper line plot. Which length happened most?",
+        hint: "Count the dots above each length and pick the tallest dot pile.",
+        explanation: makeExplanation(
+          `${winningBar.label} has the most measurements with ${winningBar.value} dots.`,
+          winningBar.label
+        ),
+        activityType: "graph-reading"
+      }),
+      choices: bars.map((bar) => ({
+        id: `bar-${bar.label}`,
+        label: bar.label,
+        speechLabel: bar.label,
+        value: bar.label,
+        renderKind: "text"
+      })),
+      correctChoiceId: `bar-${winningBar.label}`,
+      graph: {
+        graphKind: "line-plot",
+        bars,
+        question: "Which length happened most?"
+      }
+    };
+  }
+
+  const allLabels = ["Corn", "Beans", "Toast", "Apples"];
+  const categoryCount = getMaxCategories(skill, skill.gradeBand === "G1" ? 3 : 4);
+  const labels = allLabels.slice(0, categoryCount);
   const values = uniqueValues(labels.length, 1, 2 + skill.level);
   const bars: GraphBar[] = labels.map((label, index) => ({
     label,
@@ -758,6 +1121,7 @@ const graphQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefi
     })),
     correctChoiceId: `bar-${winningBar.label}`,
     graph: {
+      graphKind: skill.constraints?.allowedLayouts?.includes("picture-graph") ? "picture-graph" : "bar-graph",
       bars,
       question: "Which snack made the biggest stink bar?"
     }
@@ -765,15 +1129,38 @@ const graphQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefi
 };
 
 const geometryQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
+  if (hasStandard(skill, "K.G.A.1")) {
+    const positions = ["above", "below", "beside", "in front of", "behind", "next to"];
+    const correct = sample(positions);
+    const prompt = `The stinky star is ${correct} the toilet. Tap the position word.`;
+    const positionOptions = [correct, ...shuffle(positions.filter((position) => position !== correct)).slice(0, 3)];
+    const choices = textChoices(correct, positionOptions);
+
+    return {
+      ...buildBase(skill, mode, {
+        prompt,
+        speech: prompt,
+        hint: "Listen for the word that tells where the stinky star is.",
+        explanation: makeExplanation(
+          `${correct} tells where the stinky star is compared with the toilet.`,
+          correct
+        ),
+        activityType: "choose-the-answer"
+      }),
+      choices,
+      correctChoiceId: `correct-${correct}`
+    };
+  }
+
   const shapesByLevel: ShapeKind[][] = [
     ["circle", "square", "triangle"],
-    ["circle", "square", "triangle", "rectangle"],
+    ["rectangle", "quadrilateral", "pentagon", "hexagon", "cube", "sphere", "cylinder", "cone"],
     ["circle", "square", "triangle", "rectangle", "hexagon"],
     ["triangle", "rectangle", "hexagon", "circle"],
     ["triangle", "rectangle", "hexagon", "square"],
     ["cube", "sphere", "cylinder", "cone"],
     ["triangle", "rectangle", "hexagon", "square"],
-    ["circle", "square", "triangle", "rectangle", "hexagon"],
+    ["circle", "square", "triangle", "rectangle", "quadrilateral", "pentagon", "hexagon"],
     ["rectangle", "square", "triangle", "hexagon"],
     ["rectangle", "square", "triangle", "hexagon"]
   ];
@@ -883,7 +1270,7 @@ const equalSharesQuestion = (skill: SkillDefinition, mode: TeachingMode): Questi
 
 const arraysQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
   if (skill.level <= 2) {
-    const total = rand(3, 11);
+    const total = rand(3, getMaxObjects(skill, 20));
     const correct = total % 2 === 0 ? "Even" : "Odd";
     const promptItem: AnswerChoice = {
       id: "prompt-socks",
@@ -923,16 +1310,19 @@ const arraysQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDef
     };
   }
 
-  const rows = rand(2, Math.min(5, 1 + skill.level));
-  const columns = rand(2, Math.min(5, skill.level >= 7 ? 5 : 4));
+  const maxRows = skill.constraints?.maxArrayRows ?? 5;
+  const maxColumns = skill.constraints?.maxArrayColumns ?? 5;
+  const rows = rand(2, Math.min(5, maxRows, 1 + skill.level));
+  const columns = rand(2, Math.min(5, maxColumns, skill.level >= 7 ? 5 : 4));
   const total = rows * columns;
+  const repeatedAddition = Array.from({ length: rows }, () => columns).join(" + ");
   return {
     ...buildBase(skill, mode, {
-      prompt: "How many toilet-paper squares are in the array?",
-      speech: "How many toilet-paper squares are in the array?",
-      hint: "Count the rows and columns of toilet-paper squares carefully.",
+      prompt: `How many toilet-paper squares are in ${rows} rows with ${columns} in each row?`,
+      speech: `How many toilet-paper squares are in ${rows} rows with ${columns} in each row?`,
+      hint: "Count the rows and columns, or add the same row size again and again.",
       explanation: makeExplanation(
-        `${rows} rows of ${columns} make ${total}.`,
+        `${rows} rows of ${columns} means ${repeatedAddition}, which makes ${total}.`,
         String(total)
       ),
       activityType: "array-counting"
