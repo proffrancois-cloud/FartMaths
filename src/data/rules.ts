@@ -58,8 +58,7 @@ export const READYNESS_BANDS = [
   { maxLevel: 2, label: "Not Yet" },
   { maxLevel: 5, label: "Growing" },
   { maxLevel: 7, label: "Strong" },
-  { maxLevel: 9, label: "Grade-2 Ready" },
-  { maxLevel: 99, label: "Beyond" }
+  { maxLevel: 10, label: "Grade-2 Ready" }
 ] as const;
 
 export const EXAMPLE_COPY = {

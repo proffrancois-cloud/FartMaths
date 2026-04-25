@@ -174,7 +174,7 @@ export const applyPlacementResults = (
     strandProgress.highestUnlockedLevel = level;
     strandProgress.placementDone = true;
     strandProgress.placementConfidence = confidence;
-    strandProgress.readiness = computeReadinessLabel(level);
+    strandProgress.readiness = computeReadinessLabel(level, strandId);
 
     strand.levels.forEach((skill) => {
       const skillProgress = nextProfile.skillProgress[skill.id];
@@ -407,7 +407,7 @@ const maybeLevelUp = (
       strandProgress.highestUnlockedLevel,
       strandProgress.currentLevel
     );
-    strandProgress.readiness = computeReadinessLabel(strandProgress.currentLevel);
+    strandProgress.readiness = computeReadinessLabel(strandProgress.currentLevel, strandId);
     const nextSkill = getSkill(strandId, strandProgress.currentLevel);
     const nextProgress = profile.skillProgress[nextSkill.id];
     nextProgress.status = "learning";
@@ -541,7 +541,7 @@ export const advanceAfterAnswer = (
     notes.push("Checkpoint ready soon.");
   }
 
-  strandProgress.readiness = computeReadinessLabel(strandProgress.highestUnlockedLevel);
+  strandProgress.readiness = computeReadinessLabel(strandProgress.highestUnlockedLevel, task.strandId);
   if (
     (strandProgress.readiness === "Grade-2 Ready" || strandProgress.readiness === "Beyond") &&
     unlockReward(nextProfile, "potty-professor")

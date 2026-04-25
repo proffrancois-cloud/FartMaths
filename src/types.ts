@@ -40,6 +40,8 @@ export type ReadinessLabel =
   | "Grade-2 Ready"
   | "Beyond";
 
+export type GradeBand = "K" | "G1" | "G2" | "K-G1" | "G1-G2" | "K-G2" | "Extension";
+
 export type ActivityType =
   | "count-and-tap"
   | "drag-to-match"
@@ -80,6 +82,47 @@ export type ShapeKind =
   | "cone";
 export type CoinKind = "penny" | "nickel" | "dime" | "quarter" | "dollar";
 
+export interface SkillConstraints {
+  maxNumber?: number;
+  maxObjects?: number;
+  maxCategories?: number;
+  layoutConstraint?: "arranged" | "scattered" | "arranged-or-scattered" | "line" | "array" | "circle";
+  allowedLayouts?: Array<
+    | "line"
+    | "array"
+    | "circle"
+    | "scattered"
+    | "ten-frame"
+    | "number-line"
+    | "bar-graph"
+    | "picture-graph"
+    | "line-plot"
+  >;
+  avoidFormalMultiplication?: boolean;
+  allowedFractionWords?: Array<
+    "half" | "halves" | "third" | "thirds" | "fourth" | "fourths" | "quarter" | "quarters"
+  >;
+  allowFractionNotation?: boolean;
+  maxArrayRows?: number;
+  maxArrayColumns?: number;
+  allowedCoins?: CoinKind[];
+  timeMinuteIncrement?: 60 | 30 | 5;
+  requireAmPm?: boolean;
+  unknownPosition?: "result" | "change" | "start" | "any";
+  allowedProblemTypes?: Array<"add-to" | "take-from" | "put-together" | "take-apart" | "compare">;
+}
+
+export interface SkillAlignment {
+  ccssCodes: string[];
+  gradeBand: GradeBand;
+  isCoreK2: boolean;
+  isExtension: boolean;
+  alignmentNotes?: string;
+  constraints?: SkillConstraints;
+}
+
+export interface SkillAlignmentSeed extends SkillAlignment {}
+
 export interface AvatarDefinition {
   id: AvatarId;
   label: string;
@@ -109,6 +152,12 @@ export interface SkillDefinition {
   summary: string;
   activityType: ActivityType;
   difficultyBand: string;
+  ccssCodes: string[];
+  gradeBand: GradeBand;
+  isCoreK2: boolean;
+  isExtension: boolean;
+  alignmentNotes?: string;
+  constraints?: SkillConstraints;
   scaffold: {
     concrete: string;
     pictorial: string;
@@ -250,6 +299,9 @@ export interface QuestionDefinition {
   skillId: string;
   strandId: StrandId;
   level: number;
+  ccssCodes?: string[];
+  gradeBand?: GradeBand;
+  constraints?: SkillConstraints;
   mode: TeachingMode;
   type: ActivityType;
   prompt: string;

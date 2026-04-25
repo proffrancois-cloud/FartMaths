@@ -206,7 +206,7 @@ const getStrandSnapshot = (profile: ChildProfile, strand: StrandDefinition) => {
     currentSkill,
     currentProgress,
     accuracy,
-    readiness: computeReadinessLabel(strandProgress.highestUnlockedLevel)
+    readiness: computeReadinessLabel(strandProgress.highestUnlockedLevel, strand.id)
   };
 };
 

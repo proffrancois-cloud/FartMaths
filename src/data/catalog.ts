@@ -1,7 +1,10 @@
 import type {
   ActivityType,
   AvatarDefinition,
+  GradeBand,
   RewardDefinition,
+  SkillAlignmentSeed,
+  SkillConstraints,
   StrandDefinition,
   StrandId
 } from "../types";
@@ -114,15 +117,59 @@ interface StrandSeed {
   abstract: string;
   celebrations: string[];
   summaries: string[];
+  ccss: SkillAlignmentSeed[];
 }
 
-const difficultyBandFromLevel = (level: number) => {
-  if (level <= 2) return "Kindergarten foundations";
-  if (level <= 4) return "Late Kindergarten to Grade 1 bridge";
-  if (level <= 7) return "Grade 1 growth";
-  if (level <= 9) return "Grade 2 readiness";
-  return "Beyond Grade 2 starter";
+const gradeBandToDifficultyBand = (gradeBand: GradeBand) => {
+  switch (gradeBand) {
+    case "K":
+      return "Kindergarten Core";
+    case "G1":
+      return "Grade 1 Core";
+    case "G2":
+      return "Grade 2 Core";
+    case "K-G1":
+      return "Kindergarten to Grade 1 bridge";
+    case "G1-G2":
+      return "Grade 1 to Grade 2 bridge";
+    case "K-G2":
+      return "K-2 cross-grade reasoning";
+    case "Extension":
+      return "Extension beyond required K-2";
+  }
 };
+
+const withOptionalAlignmentFields = (
+  alignmentNotes?: string,
+  constraints?: SkillConstraints
+) => ({
+  ...(alignmentNotes ? { alignmentNotes } : {}),
+  ...(constraints ? { constraints } : {})
+});
+
+const coreAlignment = (
+  ccssCodes: string[],
+  gradeBand: GradeBand,
+  alignmentNotes?: string,
+  constraints?: SkillConstraints
+): SkillAlignmentSeed => ({
+  ccssCodes,
+  gradeBand,
+  isCoreK2: true,
+  isExtension: false,
+  ...withOptionalAlignmentFields(alignmentNotes, constraints)
+});
+
+const extensionAlignment = (
+  alignmentNotes: string,
+  constraints?: SkillConstraints
+): SkillAlignmentSeed => ({
+  ccssCodes: ["Extension"],
+  gradeBand: "Extension",
+  isCoreK2: false,
+  isExtension: true,
+  ...withOptionalAlignmentFields(alignmentNotes, constraints)
+});
 
 const makeSkillId = (strandId: StrandId, level: number) =>
   `${strandId}-level-${String(level).padStart(2, "0")}`;
@@ -162,6 +209,24 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Skip-count by 5s and 10s.",
       "Count within 1000; skip-count by 100s.",
       "Read / write numbers to 1000; use number names and expanded form."
+    ],
+    ccss: [
+      coreAlignment(["K.CC.A.3"], "K", "Numerals 0-20; this is an early slice.", { maxNumber: 5 }),
+      coreAlignment(["K.CC.A.1", "K.CC.A.3"], "K", "Count sequence plus numeral recognition.", { maxNumber: 10 }),
+      coreAlignment(["K.CC.A.3"], "K", "Keep 0-20 explicit.", { maxNumber: 20 }),
+      coreAlignment(["K.CC.A.2"], "K-G1", "Counting forward from a given number, with a Grade 1 bridge.", {
+        maxNumber: 30
+      }),
+      coreAlignment(["1.NBT.A.1"], "G1", "Grade 1 extends count, read, and write to 120.", {
+        maxNumber: 50
+      }),
+      coreAlignment(["K.CC.A.1"], "K", "Officially Kindergarten; current level placement must not imply G1 only.", {
+        maxNumber: 100
+      }),
+      coreAlignment(["1.NBT.A.1"], "G1", "Grade 1 counting and numeral sequence to 120.", { maxNumber: 120 }),
+      coreAlignment(["2.NBT.A.2"], "G2", "Skip-count by 5s is Grade 2.", { maxNumber: 100 }),
+      coreAlignment(["2.NBT.A.2"], "G2", "Grade 2 skip-counting within 1000.", { maxNumber: 1000 }),
+      coreAlignment(["2.NBT.A.3"], "G2", "Not Beyond; official Grade 2.", { maxNumber: 1000 })
     ]
   },
   {
@@ -198,6 +263,32 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Count objects in equal groups and small arrays.",
       "Count tens and ones blocks to 100.",
       "Count hundreds, tens, and ones to 1000."
+    ],
+    ccss: [
+      coreAlignment(["K.CC.B.4", "K.CC.B.5"], "K", "Early cardinality.", { maxObjects: 3 }),
+      coreAlignment(["K.CC.B.4a"], "K", "One object receives one number word.", { maxObjects: 5 }),
+      coreAlignment(["K.CC.B.5"], "K", "Arranged sets.", {
+        maxObjects: 10,
+        layoutConstraint: "arranged",
+        allowedLayouts: ["line", "array"]
+      }),
+      coreAlignment(["K.CC.B.5"], "K", "Pass 2 correction: scattered should be max 10; arranged can go to 20.", {
+        maxObjects: 20,
+        layoutConstraint: "scattered"
+      }),
+      coreAlignment(["K.CC.B.4b"], "K", "Cardinality principle.", { maxObjects: 20 }),
+      coreAlignment(["K.CC.B.4a", "K.CC.B.5"], "K", "Respect object and layout limits.", {
+        maxObjects: 20,
+        layoutConstraint: "arranged-or-scattered"
+      }),
+      coreAlignment(["1.OA.C.5", "1.OA.C.6"], "G1", "Addition strategy.", { maxNumber: 20 }),
+      coreAlignment(["2.OA.C.4"], "G2", "Foundation for multiplication through arrays and equal groups.", {
+        maxArrayRows: 5,
+        maxArrayColumns: 5,
+        avoidFormalMultiplication: true
+      }),
+      coreAlignment(["1.NBT.B.2"], "G1", "Tens and ones place value.", { maxNumber: 100 }),
+      coreAlignment(["2.NBT.A.1"], "G2", "Not Beyond.", { maxNumber: 1000 })
     ]
   },
   {
@@ -234,6 +325,22 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Use number lines and measurement visuals to compare.",
       "Compare three-digit numbers.",
       "Explain a comparison using place-value language."
+    ],
+    ccss: [
+      coreAlignment(["K.CC.C.6"], "K", "Compare groups.", { maxObjects: 3 }),
+      coreAlignment(["K.CC.C.6"], "K", "Kindergarten group comparison.", { maxObjects: 10 }),
+      coreAlignment(["K.CC.C.7"], "K", "Kindergarten numerals 1-10.", { maxNumber: 10 }),
+      coreAlignment(["1.NBT.B.3"], "G1", "Grade 1 comparison extension.", { maxNumber: 20 }),
+      coreAlignment(["1.NBT.B.3"], "G1", "Symbols supported by meaning.", { maxNumber: 20 }),
+      coreAlignment(["1.NBT.B.3"], "G1", "Grade 1 two-digit comparison.", { maxNumber: 100 }),
+      coreAlignment(["1.NBT.B.3"], "G1", "Extension of compare; acceptable as a skill.", { maxNumber: 100 }),
+      coreAlignment(["2.MD.B.6"], "G2", "Supports number line and length reasoning.", {
+        allowedLayouts: ["number-line"]
+      }),
+      coreAlignment(["2.NBT.A.4"], "G2", "Grade 2 three-digit comparison.", { maxNumber: 1000 }),
+      coreAlignment(["2.NBT.A.4", "2.NBT.B.9"], "G2", "Reasoning and explanation, not Beyond.", {
+        maxNumber: 1000
+      })
     ]
   },
   {
@@ -270,6 +377,27 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Subtract multiples of 10; use drawings within 100.",
       "Fluently add and subtract within 100.",
       "Add / subtract within 1000 with drawings and place-value methods."
+    ],
+    ccss: [
+      coreAlignment(["K.OA.A.1", "K.OA.A.2"], "K", "Meaning of add and subtract.", {
+        maxNumber: 3,
+        allowedProblemTypes: ["add-to", "take-from"]
+      }),
+      coreAlignment(["K.OA.A.5"], "K", "Fluency within 5.", { maxNumber: 5 }),
+      coreAlignment(["K.OA.A.2"], "K", "Within 10.", { maxNumber: 10 }),
+      coreAlignment(["K.OA.A.3", "K.OA.A.4"], "K", "Decompose numbers and make 10.", {
+        maxNumber: 10,
+        allowedLayouts: ["ten-frame"]
+      }),
+      coreAlignment(["1.OA.C.5", "1.OA.C.6"], "G1", "Grade 1.", { maxNumber: 20 }),
+      coreAlignment(["1.OA.B.4", "1.OA.D.8"], "G1", "Unknown addend.", {
+        maxNumber: 20,
+        unknownPosition: "any"
+      }),
+      coreAlignment(["1.NBT.C.4"], "G1", "Place-value addition.", { maxNumber: 100 }),
+      coreAlignment(["1.NBT.C.6"], "G1", "Subtract multiples of 10.", { maxNumber: 100 }),
+      coreAlignment(["2.NBT.B.5"], "G2", "Grade 2.", { maxNumber: 100 }),
+      coreAlignment(["2.NBT.B.7"], "G2", "Not Beyond; official Grade 2.", { maxNumber: 1000 })
     ]
   },
   {
@@ -306,6 +434,18 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Build 3-digit numbers with hundreds, tens, ones.",
       "Read, write, and compare numbers to 1000.",
       "Use expanded form and mental +100 / -100."
+    ],
+    ccss: [
+      coreAlignment(["K.NBT.A.1"], "K", "Pre-place-value ones.", { maxNumber: 10 }),
+      coreAlignment(["K.NBT.A.1"], "K", "Kindergarten base-ten foundation.", { maxNumber: 19 }),
+      coreAlignment(["K.NBT.A.1"], "K", "Kindergarten.", { maxNumber: 19 }),
+      coreAlignment(["1.NBT.B.2a"], "G1", "10 ones = 1 ten.", { maxNumber: 100 }),
+      coreAlignment(["1.NBT.B.2"], "G1", "Tens and ones.", { maxNumber: 100 }),
+      coreAlignment(["1.NBT.B.3"], "G1", "Grade 1.", { maxNumber: 100 }),
+      coreAlignment(["1.NBT.C.5"], "G1", "10 more / 10 less.", { maxNumber: 100 }),
+      coreAlignment(["2.NBT.A.1"], "G2", "Hundreds, tens, and ones.", { maxNumber: 1000 }),
+      coreAlignment(["2.NBT.A.3", "2.NBT.A.4"], "G2", "Grade 2.", { maxNumber: 1000 }),
+      coreAlignment(["2.NBT.A.3", "2.NBT.B.8"], "G2", "Not Beyond.", { maxNumber: 1000 })
     ]
   },
   {
@@ -342,6 +482,31 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Solve one- and two-step mixed stories within 100.",
       "Solve length, time, and money story problems.",
       "Explain which operation fits a K–2 story problem."
+    ],
+    ccss: [
+      coreAlignment(["K.OA.A.1", "K.OA.A.2"], "K", "Concrete story problems.", {
+        maxNumber: 10,
+        allowedProblemTypes: ["add-to", "take-from"]
+      }),
+      coreAlignment(["K.OA.A.1"], "K", "Representation.", { maxNumber: 10 }),
+      coreAlignment(["K.OA.A.2"], "K", "Kindergarten.", { maxNumber: 10 }),
+      coreAlignment(["1.OA.A.1"], "G1", "Grade 1.", { maxNumber: 20 }),
+      coreAlignment(["1.OA.A.1", "1.OA.D.8"], "G1", "Unknown in all positions.", {
+        maxNumber: 20,
+        unknownPosition: "any"
+      }),
+      coreAlignment(["1.OA.A.1", "1.OA.B.4"], "G1", "Compare and unknown-addend.", {
+        maxNumber: 20,
+        allowedProblemTypes: ["put-together", "take-apart", "compare"]
+      }),
+      coreAlignment(["2.OA.A.1"], "G2", "Grade 2.", { maxNumber: 100 }),
+      coreAlignment(["2.OA.A.1"], "G2", "Grade 2.", { maxNumber: 100 }),
+      coreAlignment(["2.MD.B.5", "2.MD.C.8"], "G2", "Length and money are explicit; time is an application.", {
+        maxNumber: 100
+      }),
+      coreAlignment(["MP1", "MP2", "MP4"], "K-G2", "Mathematical practice and operation reasoning.", {
+        maxNumber: 100
+      })
     ]
   },
   {
@@ -378,6 +543,18 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Add / subtract lengths in word problems.",
       "Estimate then measure with inches / centimeters.",
       "Choose the right tool and unit for the job."
+    ],
+    ccss: [
+      coreAlignment(["K.MD.A.1"], "K", "Describe measurable attributes."),
+      coreAlignment(["K.MD.A.2"], "K", "Direct comparison."),
+      coreAlignment(["K.MD.B.3"], "K", "Classification."),
+      coreAlignment(["1.MD.A.2"], "G1", "Nonstandard units."),
+      coreAlignment(["1.MD.A.2"], "G1", "Critical precision."),
+      coreAlignment(["2.MD.A.1"], "G2", "Standard tools."),
+      coreAlignment(["2.MD.A.4"], "G2", "Difference in length."),
+      coreAlignment(["2.MD.B.5"], "G2", "Length word problems.", { maxNumber: 100 }),
+      coreAlignment(["2.MD.A.3"], "G2", "Estimation."),
+      coreAlignment(["2.MD.A.1"], "G2", "Tool choice.")
     ]
   },
   {
@@ -414,6 +591,18 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Use a simple schedule with start times.",
       "Solve basic time story problems in 5-minute steps.",
       "Use a.m. / p.m. and daily schedule reasoning."
+    ],
+    ccss: [
+      extensionAlignment("Useful pre-skill; not an explicit CCSS math standard."),
+      coreAlignment(["1.MD.B.3"], "G1", "Prepares hour and half-hour.", { timeMinuteIncrement: 60 }),
+      coreAlignment(["1.MD.B.3"], "G1", "Grade 1.", { timeMinuteIncrement: 60 }),
+      coreAlignment(["1.MD.B.3"], "G1", "Grade 1.", { timeMinuteIncrement: 30 }),
+      coreAlignment(["1.MD.B.3"], "G1", "Grade 1.", { timeMinuteIncrement: 30 }),
+      coreAlignment(["2.MD.C.7"], "G2", "Grade 2.", { timeMinuteIncrement: 5 }),
+      coreAlignment(["2.MD.C.7"], "G2", "Grade 2.", { timeMinuteIncrement: 5 }),
+      coreAlignment(["2.MD.C.7"], "G2", "Application.", { timeMinuteIncrement: 5 }),
+      extensionAlignment("Useful, but not explicit K-2 CCSS content.", { timeMinuteIncrement: 5 }),
+      coreAlignment(["2.MD.C.7"], "G2", "Grade 2.", { timeMinuteIncrement: 5, requireAmPm: true })
     ]
   },
   {
@@ -450,6 +639,43 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Use bills + coins in simple totals.",
       "Solve simple money stories.",
       "Make an exact amount in more than one way."
+    ],
+    ccss: [
+      coreAlignment(["2.MD.C.8"], "G2", "Pre-skill for money; money is Grade 2 in strict K-2 CCSS.", {
+        allowedCoins: ["penny", "nickel", "dime", "quarter"]
+      }),
+      coreAlignment(["2.MD.C.8"], "G2", "U.S. money.", {
+        allowedCoins: ["penny", "nickel", "dime", "quarter"]
+      }),
+      coreAlignment(["2.MD.C.8"], "G2", "U.S. money.", {
+        allowedCoins: ["penny", "nickel", "dime", "quarter"]
+      }),
+      coreAlignment(["2.MD.C.8"], "G2", "Grade 2.", {
+        allowedCoins: ["penny", "nickel", "dime", "quarter"]
+      }),
+      coreAlignment(["2.MD.C.8"], "G2", "Grade 2.", {
+        maxNumber: 25,
+        allowedCoins: ["penny", "nickel", "dime", "quarter"]
+      }),
+      coreAlignment(["2.MD.C.8"], "G2", "Application.", {
+        allowedCoins: ["penny", "nickel", "dime", "quarter"]
+      }),
+      coreAlignment(["2.MD.C.8"], "G2", "Grade 2.", {
+        maxNumber: 100,
+        allowedCoins: ["penny", "nickel", "dime", "quarter"]
+      }),
+      coreAlignment(["2.MD.C.8"], "G2", "Grade 2.", {
+        maxNumber: 100,
+        allowedCoins: ["penny", "nickel", "dime", "quarter", "dollar"]
+      }),
+      coreAlignment(["2.MD.C.8"], "G2", "Word problems.", {
+        maxNumber: 100,
+        allowedCoins: ["penny", "nickel", "dime", "quarter"]
+      }),
+      coreAlignment(["2.MD.C.8"], "G2", "Good extension within the same standard.", {
+        maxNumber: 100,
+        allowedCoins: ["penny", "nickel", "dime", "quarter", "dollar"]
+      })
     ]
   },
   {
@@ -486,6 +712,39 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Create a bar graph from small data.",
       "Compare several categories and totals.",
       "Use graph information in short word problems."
+    ],
+    ccss: [
+      coreAlignment(["K.MD.B.3"], "K", "Classify.", { maxCategories: 3 }),
+      coreAlignment(["K.MD.B.3"], "K", "Count categories.", { maxCategories: 3 }),
+      coreAlignment(["K.MD.B.3", "1.MD.C.4"], "K-G1", "Compare data.", { maxCategories: 3 }),
+      coreAlignment(["1.MD.C.4"], "G1", "Up to 3 categories in Grade 1.", {
+        maxCategories: 3,
+        allowedLayouts: ["picture-graph"]
+      }),
+      coreAlignment(["1.MD.C.4"], "G1", "Up to 3 categories.", {
+        maxCategories: 3,
+        allowedLayouts: ["picture-graph"]
+      }),
+      coreAlignment(["2.MD.D.10"], "G2", "Up to 4 categories.", {
+        maxCategories: 4,
+        allowedLayouts: ["bar-graph"]
+      }),
+      coreAlignment(["2.MD.D.10"], "G2", "Grade 2.", {
+        maxCategories: 4,
+        allowedLayouts: ["bar-graph"]
+      }),
+      coreAlignment(["2.MD.D.10"], "G2", "Grade 2.", {
+        maxCategories: 4,
+        allowedLayouts: ["bar-graph"]
+      }),
+      coreAlignment(["2.MD.D.10"], "G2", "Max 4 categories.", {
+        maxCategories: 4,
+        allowedLayouts: ["bar-graph"]
+      }),
+      coreAlignment(["2.MD.D.10"], "G2", "Grade 2.", {
+        maxCategories: 4,
+        allowedLayouts: ["bar-graph"]
+      })
     ]
   },
   {
@@ -522,6 +781,20 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Sort shapes and explain why they belong.",
       "Partition rectangles into rows / columns; count squares.",
       "Combine and decompose shapes to solve puzzles."
+    ],
+    ccss: [
+      coreAlignment(["K.G.A.2"], "K", "Shape naming."),
+      coreAlignment(["K.G.A.2", "K.G.A.3", "2.G.A.1"], "K-G2", "Pass 2: add quadrilateral, pentagon, and cube explicitly."),
+      coreAlignment(["K.G.A.2"], "K", "Orientation and size."),
+      coreAlignment(["K.G.B.4"], "K", "Attributes."),
+      coreAlignment(["K.G.B.5"], "K", "Modeling shapes."),
+      coreAlignment(["K.G.B.6"], "K", "Composition."),
+      coreAlignment(["1.G.A.1"], "G1", "Grade 1."),
+      coreAlignment(["1.G.A.1", "2.G.A.1"], "G1-G2", "Attribute reasoning."),
+      coreAlignment(["2.G.A.2"], "G2", "Grade 2.", {
+        allowedLayouts: ["array"]
+      }),
+      coreAlignment(["K.G.B.6", "1.G.A.2"], "K-G1", "Not necessarily Beyond.")
     ]
   },
   {
@@ -558,6 +831,46 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Match 1/2, 1/3, 1/4 to shaded shapes.",
       "Compare simple unit fractions with the same whole visually.",
       "Build one whole from equal shares."
+    ],
+    ccss: [
+      coreAlignment(["1.G.A.3"], "G1", "Equal shares.", {
+        allowFractionNotation: false
+      }),
+      coreAlignment(["1.G.A.3"], "G1", "Halves.", {
+        allowedFractionWords: ["half", "halves"],
+        allowFractionNotation: false
+      }),
+      coreAlignment(["1.G.A.3"], "G1", "Fourths and quarters.", {
+        allowedFractionWords: ["fourth", "fourths", "quarter", "quarters"],
+        allowFractionNotation: false
+      }),
+      coreAlignment(["1.G.A.3"], "G1", "Equal partitioning.", {
+        allowFractionNotation: false
+      }),
+      coreAlignment(["2.G.A.3"], "G2", "Grade 2 nuance.", {
+        allowedFractionWords: ["half", "halves", "third", "thirds", "fourth", "fourths", "quarter", "quarters"],
+        allowFractionNotation: false
+      }),
+      coreAlignment(["1.G.A.3"], "G1", "Use words, not just symbols.", {
+        allowedFractionWords: ["half", "halves", "fourth", "fourths", "quarter", "quarters"],
+        allowFractionNotation: false
+      }),
+      coreAlignment(["2.G.A.3"], "G2", "Thirds are Grade 2.", {
+        allowedFractionWords: ["third", "thirds"],
+        allowFractionNotation: false
+      }),
+      coreAlignment(["2.G.A.3"], "G2", "Treat notation as support; prefer words.", {
+        allowedFractionWords: ["half", "third", "fourth", "quarter"],
+        allowFractionNotation: true
+      }),
+      extensionAlignment("Fraction comparison is beyond Grade 2.", {
+        allowedFractionWords: ["half", "third", "fourth", "quarter"],
+        allowFractionNotation: true
+      }),
+      coreAlignment(["1.G.A.3", "2.G.A.3"], "G1-G2", "Good K-2 reasoning.", {
+        allowedFractionWords: ["half", "halves", "third", "thirds", "fourth", "fourths", "quarter", "quarters"],
+        allowFractionNotation: false
+      })
     ]
   },
   {
@@ -594,37 +907,106 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Write equal-addend equations for arrays.",
       "Tell odd / even and write an equation for an even number.",
       "Use arrays as foundations for multiplication."
+    ],
+    ccss: [
+      coreAlignment(["2.OA.C.3"], "G2", "Odd/even foundation.", {
+        maxObjects: 10,
+        avoidFormalMultiplication: true
+      }),
+      coreAlignment(["2.OA.C.3"], "G2", "Grade 2.", {
+        maxObjects: 20,
+        avoidFormalMultiplication: true
+      }),
+      coreAlignment(["2.OA.C.3", "2.NBT.A.2"], "G2", "Supports even and odd.", {
+        maxNumber: 20,
+        avoidFormalMultiplication: true
+      }),
+      coreAlignment(["2.OA.C.4"], "G2", "Equal groups.", {
+        maxArrayRows: 5,
+        maxArrayColumns: 5,
+        avoidFormalMultiplication: true
+      }),
+      coreAlignment(["2.OA.C.4"], "G2", "Grade 2.", {
+        maxArrayRows: 5,
+        maxArrayColumns: 5,
+        avoidFormalMultiplication: true
+      }),
+      coreAlignment(["2.OA.C.4"], "G2", "Pass 2: avoid formal multiplication notation.", {
+        maxArrayRows: 5,
+        maxArrayColumns: 5,
+        avoidFormalMultiplication: true
+      }),
+      coreAlignment(["2.OA.C.4"], "G2", "Official limit: up to 5 rows and 5 columns.", {
+        maxArrayRows: 5,
+        maxArrayColumns: 5,
+        avoidFormalMultiplication: true
+      }),
+      coreAlignment(["2.OA.C.4"], "G2", "Example: 5 + 5 + 5.", {
+        maxArrayRows: 5,
+        maxArrayColumns: 5,
+        avoidFormalMultiplication: true
+      }),
+      coreAlignment(["2.OA.C.3"], "G2", "Even number as two equal addends.", {
+        maxObjects: 20,
+        avoidFormalMultiplication: true
+      }),
+      coreAlignment(["2.OA.C.4"], "G2", "Grade 2 foundation; no multiplication facts yet.", {
+        maxArrayRows: 5,
+        maxArrayColumns: 5,
+        avoidFormalMultiplication: true
+      })
     ]
   }
 ];
 
-export const STRANDS: StrandDefinition[] = STRAND_SEEDS.map((seed) => ({
-  id: seed.id,
-  title: seed.title,
-  shortTitle: seed.shortTitle,
-  color: seed.color,
-  mascot: seed.mascot,
-  description: seed.description,
-  levels: seed.summaries.map((summary, index) => {
-    const level = index + 1;
-    return {
-      id: makeSkillId(seed.id, level),
-      strandId: seed.id,
-      level,
-      title: summary.replace(/\.$/, ""),
-      summary,
-      activityType: seed.activityType,
-      difficultyBand: difficultyBandFromLevel(level),
-      scaffold: {
-        concrete: seed.concrete,
-        pictorial: seed.pictorial,
-        abstract: seed.abstract
-      },
-      prompt: summary.replace(/\.$/, ""),
-      celebrationTitle: seed.celebrations[index]
-    };
-  })
-}));
+export const STRANDS: StrandDefinition[] = STRAND_SEEDS.map((seed) => {
+  if (
+    seed.summaries.length !== 10 ||
+    seed.celebrations.length !== 10 ||
+    seed.ccss.length !== 10
+  ) {
+    throw new Error(`Strand ${seed.id} must have exactly 10 summaries, celebrations, and CCSS entries.`);
+  }
+
+  return {
+    id: seed.id,
+    title: seed.title,
+    shortTitle: seed.shortTitle,
+    color: seed.color,
+    mascot: seed.mascot,
+    description: seed.description,
+    levels: seed.summaries.map((summary, index) => {
+      const level = index + 1;
+      const alignment = seed.ccss[index];
+      if (!alignment) {
+        throw new Error(`Missing CCSS alignment for ${seed.id} level ${level}`);
+      }
+
+      return {
+        id: makeSkillId(seed.id, level),
+        strandId: seed.id,
+        level,
+        title: summary.replace(/\.$/, ""),
+        summary,
+        activityType: seed.activityType,
+        difficultyBand: gradeBandToDifficultyBand(alignment.gradeBand),
+        ccssCodes: [...alignment.ccssCodes],
+        gradeBand: alignment.gradeBand,
+        isCoreK2: alignment.isCoreK2,
+        isExtension: alignment.isExtension,
+        alignmentNotes: alignment.alignmentNotes,
+        constraints: alignment.constraints,
+        scaffold: {
+          concrete: seed.concrete,
+          pictorial: seed.pictorial,
+          abstract: seed.abstract
+        },
+        prompt: summary.replace(/\.$/, ""),
+        celebrationTitle: seed.celebrations[index]
+      };
+    })
+  };
+});
 
 export const STRAND_ORDER = STRANDS.map((strand) => strand.id);
 

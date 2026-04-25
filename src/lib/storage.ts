@@ -10,6 +10,7 @@ import type {
   PersistedState,
   ProfileId,
   ReadinessLabel,
+  SkillDefinition,
   SkillProgress,
   StrandId,
   StrandProgress
@@ -265,10 +266,32 @@ export const dateKey = (dateLike: string | Date = new Date()) => {
   return date.toISOString().slice(0, 10);
 };
 
-export const computeReadinessLabel = (highestLevel: number): ReadinessLabel => {
+export const computeReadinessLabelForSkill = (skill: SkillDefinition): ReadinessLabel => {
+  if (skill.isExtension || skill.gradeBand === "Extension") {
+    if (skill.level <= 2) return "Not Yet";
+    if (skill.level <= 5) return "Growing";
+    if (skill.level <= 7) return "Strong";
+    return "Beyond";
+  }
+  if (skill.gradeBand === "G2" || skill.gradeBand === "G1-G2" || skill.gradeBand === "K-G2") {
+    return "Grade-2 Ready";
+  }
+  if (skill.gradeBand === "G1" || skill.gradeBand === "K-G1") return "Strong";
+  return skill.level <= 2 ? "Not Yet" : "Growing";
+};
+
+export const computeReadinessLabel = (
+  highestLevel: number,
+  strandId?: StrandId
+): ReadinessLabel => {
+  if (strandId) {
+    const strand = STRANDS.find((item) => item.id === strandId);
+    const skill = strand?.levels.find((item) => item.level === highestLevel);
+    if (skill) return computeReadinessLabelForSkill(skill);
+  }
+
   if (highestLevel <= 2) return "Not Yet";
   if (highestLevel <= 5) return "Growing";
   if (highestLevel <= 7) return "Strong";
-  if (highestLevel <= 9) return "Grade-2 Ready";
-  return "Beyond";
+  return "Grade-2 Ready";
 };
