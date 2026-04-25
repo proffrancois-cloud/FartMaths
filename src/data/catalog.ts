@@ -256,8 +256,8 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Match 1–3 objects to the right number.",
       "Use one-to-one counting for sets to 5.",
       "Count sets to 10 in lines or arrays.",
-      "Count scattered sets to 20.",
-      "Understand last number said = total.",
+      "Count scattered sets to 10; arranged sets to 20.",
+      "Understand last number said = total and the next number is one more.",
       "Count mixed layouts without losing track.",
       "Count on to find totals within 20.",
       "Count objects in equal groups and small arrays.",
@@ -267,16 +267,17 @@ const STRAND_SEEDS: StrandSeed[] = [
     ccss: [
       coreAlignment(["K.CC.B.4", "K.CC.B.5"], "K", "Early cardinality.", { maxObjects: 3 }),
       coreAlignment(["K.CC.B.4a"], "K", "One object receives one number word.", { maxObjects: 5 }),
-      coreAlignment(["K.CC.B.5"], "K", "Arranged sets.", {
-        maxObjects: 10,
-        layoutConstraint: "arranged",
-        allowedLayouts: ["line", "array"]
-      }),
-      coreAlignment(["K.CC.B.5"], "K", "Pass 2 correction: scattered should be max 10; arranged can go to 20.", {
+      coreAlignment(["K.CC.B.5"], "K", "Arranged sets can go to 20.", {
         maxObjects: 20,
-        layoutConstraint: "scattered"
+        layoutConstraint: "arranged",
+        allowedLayouts: ["line", "array", "circle"]
       }),
-      coreAlignment(["K.CC.B.4b"], "K", "Cardinality principle.", { maxObjects: 20 }),
+      coreAlignment(["K.CC.B.5"], "K", "Scattered sets stay to 10; arranged sets may go to 20.", {
+        maxObjects: 20,
+        layoutConstraint: "arranged-or-scattered",
+        allowedLayouts: ["scattered", "line", "array", "circle"]
+      }),
+      coreAlignment(["K.CC.B.4b", "K.CC.B.4c"], "K", "Cardinality principle and one-more sequence.", { maxObjects: 20 }),
       coreAlignment(["K.CC.B.4a", "K.CC.B.5"], "K", "Respect object and layout limits.", {
         maxObjects: 20,
         layoutConstraint: "arranged-or-scattered"
@@ -288,7 +289,7 @@ const STRAND_SEEDS: StrandSeed[] = [
         avoidFormalMultiplication: true
       }),
       coreAlignment(["1.NBT.B.2"], "G1", "Tens and ones place value.", { maxNumber: 100 }),
-      coreAlignment(["2.NBT.A.1"], "G2", "Not Beyond.", { maxNumber: 1000 })
+      coreAlignment(["2.NBT.A.1", "2.NBT.A.1a", "2.NBT.A.1b"], "G2", "Not Beyond.", { maxNumber: 1000 })
     ]
   },
   {
@@ -322,7 +323,7 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Use >, <, = within 20.",
       "Compare two-digit numbers by tens and ones.",
       "Order three numbers to 100.",
-      "Use number lines and measurement visuals to compare.",
+      "Use number lines as lengths from 0 and measurement visuals to compare.",
       "Compare three-digit numbers.",
       "Explain a comparison using place-value language."
     ],
@@ -370,12 +371,12 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Join / take away within 3 with pictures.",
       "Add and subtract within 5.",
       "Add and subtract within 10 using objects.",
-      "Make and break 10 on ten-frames.",
-      "Add / subtract within 20 with counting on/back.",
-      "Solve missing-part and missing-addend within 20.",
+      "Decompose numbers to 10 in more than one way on ten-frames.",
+      "Add / subtract within 20, including three addends.",
+      "Solve missing numbers and true / false equations within 20.",
       "Add two-digit + one-digit or + tens within 100.",
       "Subtract multiples of 10; use drawings within 100.",
-      "Fluently add and subtract within 100.",
+      "Fluently add and subtract within 100; add up to four two-digit numbers.",
       "Add / subtract within 1000 with drawings and place-value methods."
     ],
     ccss: [
@@ -389,15 +390,15 @@ const STRAND_SEEDS: StrandSeed[] = [
         maxNumber: 10,
         allowedLayouts: ["ten-frame"]
       }),
-      coreAlignment(["1.OA.C.5", "1.OA.C.6"], "G1", "Grade 1.", { maxNumber: 20 }),
-      coreAlignment(["1.OA.B.4", "1.OA.D.8"], "G1", "Unknown addend.", {
+      coreAlignment(["1.OA.A.2", "1.OA.B.3", "1.OA.C.5", "1.OA.C.6"], "G1", "Grade 1, including three-addend and strategy prompts.", { maxNumber: 20 }),
+      coreAlignment(["1.OA.B.4", "1.OA.D.7", "1.OA.D.8"], "G1", "Unknown addend and equal-sign meaning.", {
         maxNumber: 20,
         unknownPosition: "any"
       }),
       coreAlignment(["1.NBT.C.4"], "G1", "Place-value addition.", { maxNumber: 100 }),
       coreAlignment(["1.NBT.C.6"], "G1", "Subtract multiples of 10.", { maxNumber: 100 }),
-      coreAlignment(["2.NBT.B.5"], "G2", "Grade 2.", { maxNumber: 100 }),
-      coreAlignment(["2.NBT.B.7"], "G2", "Not Beyond; official Grade 2.", { maxNumber: 1000 })
+      coreAlignment(["2.OA.B.2", "2.NBT.B.5", "2.NBT.B.6"], "G2", "Grade 2 fluency and multi-addend two-digit addition.", { maxNumber: 100 }),
+      coreAlignment(["2.NBT.B.7", "2.NBT.B.9"], "G2", "Not Beyond; official Grade 2 with place-value explanation.", { maxNumber: 1000 })
     ]
   },
   {
@@ -428,24 +429,24 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Build teen numbers as 10 + ones with visuals.",
       "See 11–19 as one ten and some ones.",
       "Group ones into tens.",
-      "Read two-digit numbers as tens and ones.",
+      "Read two-digit numbers as tens and ones, including bundles and leftovers.",
       "Compare two-digit numbers by place value.",
       "Add / subtract 10 mentally within 100.",
       "Build 3-digit numbers with hundreds, tens, ones.",
       "Read, write, and compare numbers to 1000.",
-      "Use expanded form and mental +100 / -100."
+      "Use expanded form, mental +100 / -100, and explain place-value moves."
     ],
     ccss: [
       coreAlignment(["K.NBT.A.1"], "K", "Pre-place-value ones.", { maxNumber: 10 }),
       coreAlignment(["K.NBT.A.1"], "K", "Kindergarten base-ten foundation.", { maxNumber: 19 }),
       coreAlignment(["K.NBT.A.1"], "K", "Kindergarten.", { maxNumber: 19 }),
-      coreAlignment(["1.NBT.B.2a"], "G1", "10 ones = 1 ten.", { maxNumber: 100 }),
-      coreAlignment(["1.NBT.B.2"], "G1", "Tens and ones.", { maxNumber: 100 }),
+      coreAlignment(["1.NBT.B.2", "1.NBT.B.2a"], "G1", "10 ones = 1 ten.", { maxNumber: 100 }),
+      coreAlignment(["1.NBT.B.2", "1.NBT.B.2b", "1.NBT.B.2c"], "G1", "Tens and ones, including multiples of ten.", { maxNumber: 100 }),
       coreAlignment(["1.NBT.B.3"], "G1", "Grade 1.", { maxNumber: 100 }),
       coreAlignment(["1.NBT.C.5"], "G1", "10 more / 10 less.", { maxNumber: 100 }),
-      coreAlignment(["2.NBT.A.1"], "G2", "Hundreds, tens, and ones.", { maxNumber: 1000 }),
+      coreAlignment(["2.NBT.A.1", "2.NBT.A.1a", "2.NBT.A.1b"], "G2", "Hundreds, tens, and ones.", { maxNumber: 1000 }),
       coreAlignment(["2.NBT.A.3", "2.NBT.A.4"], "G2", "Grade 2.", { maxNumber: 1000 }),
-      coreAlignment(["2.NBT.A.3", "2.NBT.B.8"], "G2", "Not Beyond.", { maxNumber: 1000 })
+      coreAlignment(["2.NBT.A.3", "2.NBT.B.8", "2.NBT.B.9"], "G2", "Not Beyond.", { maxNumber: 1000 })
     ]
   },
   {
@@ -475,7 +476,7 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Act out tiny add / take away stories.",
       "Choose the picture that matches a story.",
       "Solve one-step stories within 10.",
-      "Solve one-step stories within 20.",
+      "Solve one-step and three-addend stories within 20.",
       "Find the unknown in any position within 20.",
       "Use drawings / equations for put-together / compare stories.",
       "Solve one-step addition / subtraction within 100.",
@@ -490,7 +491,7 @@ const STRAND_SEEDS: StrandSeed[] = [
       }),
       coreAlignment(["K.OA.A.1"], "K", "Representation.", { maxNumber: 10 }),
       coreAlignment(["K.OA.A.2"], "K", "Kindergarten.", { maxNumber: 10 }),
-      coreAlignment(["1.OA.A.1"], "G1", "Grade 1.", { maxNumber: 20 }),
+      coreAlignment(["1.OA.A.1", "1.OA.A.2"], "G1", "Grade 1, including three whole numbers.", { maxNumber: 20 }),
       coreAlignment(["1.OA.A.1", "1.OA.D.8"], "G1", "Unknown in all positions.", {
         maxNumber: 20,
         unknownPosition: "any"
@@ -535,10 +536,10 @@ const STRAND_SEEDS: StrandSeed[] = [
     summaries: [
       "Use words like taller, shorter, longer, heavier.",
       "Directly compare two objects.",
-      "Sort by measurable attribute.",
-      "Measure with nonstandard units.",
+      "Sort and order three objects by measurable attribute.",
+      "Compare lengths indirectly using a third object.",
       "Use equal-size units with no gaps / overlaps.",
-      "Measure lengths with a ruler (whole units).",
+      "Measure the same length with two different units.",
       "Compare two measured lengths.",
       "Add / subtract lengths in word problems.",
       "Estimate then measure with inches / centimeters.",
@@ -547,10 +548,10 @@ const STRAND_SEEDS: StrandSeed[] = [
     ccss: [
       coreAlignment(["K.MD.A.1"], "K", "Describe measurable attributes."),
       coreAlignment(["K.MD.A.2"], "K", "Direct comparison."),
-      coreAlignment(["K.MD.B.3"], "K", "Classification."),
-      coreAlignment(["1.MD.A.2"], "G1", "Nonstandard units."),
+      coreAlignment(["K.MD.B.3", "1.MD.A.1"], "K-G1", "Classification and ordering three objects."),
+      coreAlignment(["1.MD.A.1"], "G1", "Indirect comparison through a third object."),
       coreAlignment(["1.MD.A.2"], "G1", "Critical precision."),
-      coreAlignment(["2.MD.A.1"], "G2", "Standard tools."),
+      coreAlignment(["2.MD.A.1", "2.MD.A.2"], "G2", "Measure the same object with different units."),
       coreAlignment(["2.MD.A.4"], "G2", "Difference in length."),
       coreAlignment(["2.MD.B.5"], "G2", "Length word problems.", { maxNumber: 100 }),
       coreAlignment(["2.MD.A.3"], "G2", "Estimation."),
@@ -709,7 +710,7 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Make a simple picture graph.",
       "Read a bar graph.",
       "Answer how many more / fewer from a graph.",
-      "Create a bar graph from small data.",
+      "Create a bar graph or line plot from small data.",
       "Compare several categories and totals.",
       "Use graph information in short word problems."
     ],
@@ -729,9 +730,9 @@ const STRAND_SEEDS: StrandSeed[] = [
         maxCategories: 4,
         allowedLayouts: ["bar-graph"]
       }),
-      coreAlignment(["2.MD.D.10"], "G2", "Grade 2.", {
+      coreAlignment(["2.MD.D.9", "2.MD.D.10"], "G2", "Grade 2 line plots and bar graphs.", {
         maxCategories: 4,
-        allowedLayouts: ["bar-graph"]
+        allowedLayouts: ["bar-graph", "line-plot"]
       }),
       coreAlignment(["2.MD.D.10"], "G2", "Grade 2.", {
         maxCategories: 4,
@@ -772,8 +773,8 @@ const STRAND_SEEDS: StrandSeed[] = [
     ],
     summaries: [
       "Name circle, square, triangle.",
-      "Name rectangle, hexagon, and common 3D solids.",
-      "Recognize shapes in any size / orientation.",
+      "Name rectangles, quadrilaterals, pentagons, hexagons, cubes, and common solids.",
+      "Recognize shapes in any size, orientation, or position.",
       "Describe sides, corners, flat, solid.",
       "Build and draw shapes.",
       "Compose simple shapes to make new shapes.",
@@ -784,8 +785,8 @@ const STRAND_SEEDS: StrandSeed[] = [
     ],
     ccss: [
       coreAlignment(["K.G.A.2"], "K", "Shape naming."),
-      coreAlignment(["K.G.A.2", "K.G.A.3", "2.G.A.1"], "K-G2", "Pass 2: add quadrilateral, pentagon, and cube explicitly."),
-      coreAlignment(["K.G.A.2"], "K", "Orientation and size."),
+      coreAlignment(["K.G.A.2", "K.G.A.3", "2.G.A.1"], "K-G2", "Quadrilaterals, pentagons, hexagons, cubes, and common solids are explicit."),
+      coreAlignment(["K.G.A.1", "K.G.A.2"], "K", "Orientation, size, and spatial language."),
       coreAlignment(["K.G.B.4"], "K", "Attributes."),
       coreAlignment(["K.G.B.5"], "K", "Modeling shapes."),
       coreAlignment(["K.G.B.6"], "K", "Composition."),
@@ -828,8 +829,8 @@ const STRAND_SEEDS: StrandSeed[] = [
       "See that equal shares of the same whole can look different.",
       "Use words half, fourth, quarter.",
       "Intro to thirds with visuals.",
-      "Match 1/2, 1/3, 1/4 to shaded shapes.",
-      "Compare simple unit fractions with the same whole visually.",
+      "Match one half, one third, and one fourth words to shaded shapes.",
+      "Extension: compare simple unit fractions with the same whole visually.",
       "Build one whole from equal shares."
     ],
     ccss: [
@@ -902,8 +903,8 @@ const STRAND_SEEDS: StrandSeed[] = [
       "Count by 2s to 20.",
       "See equal groups with pictures.",
       "Use repeated addition for equal groups.",
-      "Read small arrays such as 2x3 or 3x4.",
-      "Use arrays up to 5x5.",
+      "Read small arrays as rows and columns, such as 2 rows of 3.",
+      "Use arrays up to 5 rows by 5 columns.",
       "Write equal-addend equations for arrays.",
       "Tell odd / even and write an equation for an even number.",
       "Use arrays as foundations for multiplication."

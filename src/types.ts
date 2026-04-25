@@ -75,6 +75,8 @@ export type ShapeKind =
   | "square"
   | "triangle"
   | "rectangle"
+  | "quadrilateral"
+  | "pentagon"
   | "hexagon"
   | "cube"
   | "sphere"
