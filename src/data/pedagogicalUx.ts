@@ -76,6 +76,7 @@ export const UX_PED_RESCUE_MOVES = [
   "equal-share-overlay",
   "act-out-story",
   "reduce-choice-load",
+  "build-with-guides",
   "worked-example-reset"
 ] as const satisfies readonly UxPedRescueMove[];
 
@@ -87,6 +88,7 @@ export const UX_PED_LEARNING_PHASES = [
   "feedback",
   "rescue",
   "mastery-check",
+  "review",
   "next-step"
 ] as const satisfies readonly UxPedLearningPhase[];
 

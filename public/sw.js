@@ -1,5 +1,5 @@
-const CACHE_NAME = "fartmaths-shell-v2";
-const RUNTIME_CACHE = "fartmaths-runtime-v2";
+const CACHE_NAME = "fartmaths-shell-v4";
+const RUNTIME_CACHE = "fartmaths-runtime-v4";
 const scopeUrl = new URL(self.registration.scope);
 const homePath = new URL("./", scopeUrl).pathname;
 const indexPath = new URL("./index.html", scopeUrl).pathname;

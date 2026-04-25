@@ -11,6 +11,11 @@ import {
   planDailySession
 } from "../engine/progression";
 import { getUpcomingRewards, getStrandCompletion } from "../engine/rewards";
+import {
+  buildPedagogicalFeedback,
+  getLearningScriptSpeech,
+  getSkillLearningScript
+} from "../engine/learningLoop";
 import { useFartAudio } from "../hooks/useFartAudio";
 import { useSpeech } from "../hooks/useSpeech";
 import {
@@ -38,6 +43,7 @@ import type {
   QuestionDefinition,
   SessionTask,
   ShapeKind,
+  SkillLearningScript,
   StrandDefinition,
   StrandId
 } from "../types";
@@ -52,6 +58,8 @@ interface ReviewState {
   explanationText: string;
   explanationSpeech: string;
   noteText?: string;
+  nextActionText?: string;
+  rescueText?: string;
   detailText?: string;
   rewardTitles?: string[];
   nextScreen: Screen;
@@ -78,78 +86,19 @@ interface ThemeVisual {
 }
 
 const baseUrl = import.meta.env.BASE_URL ?? "/";
+const APP_LOGO_SRC = "/logo.png";
 const avatarMap = Object.fromEntries(
   AVATARS.map((avatar) => [avatar.id, avatar])
 ) as Partial<Record<AvatarId, AvatarDefinition>>;
 
-const CORRECT_FEEDBACK_LINES = [
-  "Nice job, little stinky genius.",
-  "Yes, sweet farty brain.",
-  "Correct, potty champion.",
-  "Woohoo, clever little poop head.",
-  "You got it, toilet star.",
-  "Right answer, stinky smarty.",
-  "Boom, perfect potty math.",
-  "Yes, you clever little butt.",
-  "Great job, caca captain.",
-  "Correct, pipi pro.",
-  "You nailed it, diaper hero.",
-  "That's right, little fart boss.",
-  "Super job, stinky feet thinker.",
-  "Yes, potty power.",
-  "You did it, toilet wizard.",
-  "Correct, little couche champion.",
-  "Nice one, clever caca kid.",
-  "Sweet, you solved the stinky math.",
-  "Yes, butt brain for the win.",
-  "Hooray, perfect poop pick."
-];
-
-const FIRST_WRONG_FEEDBACK_LINES = [
-  "Oops, stinky choice. Try again.",
-  "Uh-oh, wrong potty. Try again.",
-  "Yuck, that one smells wrong.",
-  "Oopsy caca, not that one.",
-  "Nope, little stinker. Try again.",
-  "That answer missed the toilet.",
-  "Pipi problem. Check again.",
-  "Stinky guess, try once more.",
-  "Not this poop, try another one.",
-  "Uh-oh, your butt guessed wrong.",
-  "That one is too stinky to be right.",
-  "Wrong potty pick. Try again.",
-  "Caca mistake. Let's look again.",
-  "Not right yet, little fart brain.",
-  "Oops, that answer needs a fresh wipe.",
-  "That one splashed the wrong way.",
-  "Too stinky, not correct.",
-  "Your toilet guess was brave, but wrong.",
-  "Nope, that one belongs in the wrong potty.",
-  "Try again, little poop detective."
-];
-
-const FINAL_WRONG_FEEDBACK_LINES = [
-  "Good try, little stinker. Look again.",
-  "Almost, potty pal.",
-  "Close, but that one is still a bit stinky.",
-  "Nice try, caca captain.",
-  "Almost there, toilet hero.",
-  "Good try, little fart friend.",
-  "Not yet, but your potty brain is working.",
-  "So close, little poop pro.",
-  "Try again, stinky star.",
-  "Almost, couche champion."
-];
-
 const THEME_VISUALS: ThemeVisual[] = [
   { key: "fart", label: "Fart", src: "/visuals/Fart.png", aliases: ["fart", "toot", "puff"] },
-  { key: "poop", label: "Poop", src: "/visuals/poop.png", aliases: ["poop", "poopy", "caca"] },
+  { key: "poop", label: "Poo", src: "/visuals/poo.png", aliases: ["poop", "poopy", "poo", "caca"] },
   { key: "pee", label: "Pee", src: "/visuals/pee.png", aliases: ["pee", "pipi"] },
   { key: "diaper", label: "Diaper", src: "/visuals/diaper.png", aliases: ["diaper", "diapers", "couche"] },
   { key: "toilet", label: "Toilet", src: "/visuals/toilet.png", aliases: ["toilet", "potty"] },
   { key: "stinky", label: "Stinky", src: "/visuals/stinky.png", aliases: ["stinky", "stink"] },
   { key: "butt", label: "Butt", src: "/visuals/butt.png", aliases: ["butt"] },
-  { key: "weeny", label: "Weeny", src: "/visuals/weeny.png", aliases: ["weeny"] },
   { key: "foot", label: "Foot", src: "/visuals/foot.png", aliases: ["foot", "feet"] },
   { key: "panties", label: "Panties", src: "/visuals/panties.png", aliases: ["panties"] }
 ];
@@ -262,31 +211,6 @@ const getInstructionDisplay = (question: QuestionDefinition) => {
   };
 };
 
-const buildReviewExplanation = (
-  question: QuestionDefinition,
-  correct: boolean,
-  suspiciousFast: boolean
-) => {
-  const parts: string[] = [];
-
-  if (!correct) {
-    parts.push(`The correct answer is ${question.explanation.correctAnswerLabel}.`);
-  }
-
-  if (suspiciousFast) {
-    parts.push("That answer was super speedy, so it does not count toward mastery.");
-  }
-
-  parts.push(question.explanation.text);
-
-  return {
-    text: parts.join(" "),
-    speech: parts.join(" ")
-  };
-};
-
-const pickRandomLine = (items: string[]) => items[Math.floor(Math.random() * items.length)] ?? "";
-
 const buildReviewDetails = ({
   question,
   correct,
@@ -322,15 +246,19 @@ const buildReviewDetails = ({
   return detailParts.join("\n\n");
 };
 
-const getAnswerFeedbackLine = (kind: "correct" | "retry" | "final-wrong") => {
-  if (kind === "correct") {
-    return pickRandomLine(CORRECT_FEEDBACK_LINES);
-  }
-  if (kind === "retry") {
-    return pickRandomLine(FIRST_WRONG_FEEDBACK_LINES);
-  }
-  return pickRandomLine(FINAL_WRONG_FEEDBACK_LINES);
-};
+const getTaskSkill = (task: Pick<SessionTask, "strandId" | "level">) =>
+  STRAND_MAP[task.strandId].levels[Math.max(0, task.level - 1)];
+
+const getWorkedExampleText = (script: SkillLearningScript) =>
+  [
+    script.workedExample.prompt,
+    script.workedExample.modelDescription,
+    ...script.workedExample.solutionSteps.map((step, index) => `${index + 1}. ${step}`),
+    script.workedExample.answerStatement
+  ].join("\n");
+
+const getLessonStepsText = (script: SkillLearningScript) =>
+  script.lessonSteps.map((step, index) => `${index + 1}. ${step.text}`).join("\n");
 
 const renderAudioBadge = (index: number) => String.fromCharCode(65 + index);
 
@@ -1420,6 +1348,8 @@ const ReviewCard = ({
       </div>
     ) : null}
     {reviewState.noteText ? <InfoPanel title="Helpful note" text={reviewState.noteText} ttsEnabled={ttsEnabled} /> : null}
+    {reviewState.rescueText ? <InfoPanel title="Rescue move" text={reviewState.rescueText} ttsEnabled={ttsEnabled} /> : null}
+    {reviewState.nextActionText ? <InfoPanel title="Next step" text={reviewState.nextActionText} ttsEnabled={ttsEnabled} /> : null}
     {reviewState.rewardTitles && reviewState.rewardTitles.length > 0 ? (
       <div className="reward-pill-row">
         {reviewState.rewardTitles.map((title) => (
@@ -1437,6 +1367,7 @@ const ReviewCard = ({
 
 const TaskScreen = ({
   task,
+  learningScript,
   hintVisible,
   reviewState,
   ttsEnabled,
@@ -1451,6 +1382,7 @@ const TaskScreen = ({
   onContinue
 }: {
   task: SessionTask;
+  learningScript: SkillLearningScript;
   hintVisible: boolean;
   reviewState: ReviewState | null;
   ttsEnabled: boolean;
@@ -1476,6 +1408,8 @@ const TaskScreen = ({
             : "Mastery Mode";
   const instruction = getInstructionDisplay(task.question);
   const supportsHints = task.mode === "practice";
+  const lessonStepsText = getLessonStepsText(learningScript);
+  const workedExampleText = getWorkedExampleText(learningScript);
 
   return (
     <section className="task-screen card">
@@ -1505,15 +1439,22 @@ const TaskScreen = ({
       ) : task.mode === "example" ? (
         <div className="lesson-point-panel">
           <InfoPanel
-            title="Lesson point"
-            text={task.question.explanation.text}
+            title={learningScript.lessonTitle}
+            text={`${learningScript.lessonBigIdea}\n\n${lessonStepsText}`}
             ttsLabel="Read lesson point"
             onSpeak={onSpeakLesson}
             ttsEnabled={ttsEnabled}
           />
           <InfoPanel
+            title="Worked example"
+            text={workedExampleText}
+            ttsLabel="Read worked example"
+            onSpeak={onSpeakLesson}
+            ttsEnabled={ttsEnabled}
+          />
+          <InfoPanel
             title="What to notice"
-            text={task.question.hint}
+            text={learningScript.whatToNotice}
             ttsLabel="Read what to notice"
             onSpeak={onSpeakHint}
             ttsEnabled={ttsEnabled}
@@ -1528,8 +1469,8 @@ const TaskScreen = ({
         <>
           {hintVisible ? (
             <InfoPanel
-              title="Hint"
-              text={task.question.hint}
+              title="Guided support"
+              text={`${task.question.hint}\n\n${learningScript.guidedSupport.behavior}`}
               ttsLabel="Read hint"
               onSpeak={onSpeakHint}
               ttsEnabled={ttsEnabled}
@@ -1612,6 +1553,12 @@ export default function App() {
   const activeChild = activeChildId ? persistedState.profiles[activeChildId] : null;
   const currentTask = session ? session.tasks[session.currentIndex] : null;
   const currentPlacementProbe = placement?.probes[placement.probeIndex] ?? null;
+  const currentTaskLearningScript = currentTask
+    ? getSkillLearningScript(getTaskSkill(currentTask))
+    : null;
+  const currentPlacementLearningScript = currentPlacementProbe
+    ? getSkillLearningScript(getTaskSkill(currentPlacementProbe))
+    : null;
 
   useEffect(() => {
     setTaskShownAt(Date.now());
@@ -1714,6 +1661,15 @@ export default function App() {
     const responseTimeMs = Date.now() - taskShownAt;
     const correct = choiceId === currentPlacementProbe.question.correctChoiceId;
     const suspiciousFast = responseTimeMs < currentPlacementProbe.question.minResponseMs;
+    const learningScript = getSkillLearningScript(getTaskSkill(currentPlacementProbe));
+    const pedagogicalFeedback = buildPedagogicalFeedback({
+      question: currentPlacementProbe.question,
+      script: learningScript,
+      correct,
+      suspiciousFast,
+      hintUsed: false,
+      firstTry: true
+    });
 
     const nextPlacement: PlacementProgress = {
       ...placement,
@@ -1726,9 +1682,12 @@ export default function App() {
       }
     };
 
-    const explanation = buildReviewExplanation(currentPlacementProbe.question, correct, suspiciousFast);
-    const feedbackLine = getAnswerFeedbackLine(correct ? "correct" : "final-wrong");
-    playAnswerFeedback(feedbackLine);
+    const explanation = {
+      text: pedagogicalFeedback.explanation,
+      speech: pedagogicalFeedback.audioText ?? pedagogicalFeedback.explanation
+    };
+    const feedbackLine = pedagogicalFeedback.headline;
+    playAnswerFeedback(pedagogicalFeedback.audioText ?? feedbackLine);
 
     if (nextPlacement.probeIndex >= nextPlacement.probes.length) {
       const placedProfile = applyPlacementResults(activeChild, nextPlacement.scoresByStrand);
@@ -1736,9 +1695,11 @@ export default function App() {
         scope: "placement",
         correct,
         feedbackText: feedbackLine,
-        feedbackSpeech: feedbackLine,
+        feedbackSpeech: pedagogicalFeedback.audioText ?? feedbackLine,
         explanationText: explanation.text,
         explanationSpeech: explanation.speech,
+        nextActionText: pedagogicalFeedback.nextAction,
+        rescueText: pedagogicalFeedback.rescueSuggested ? learningScript.rescue.explanation : undefined,
         nextScreen: "dashboard",
         nextPlacement: null,
         nextProfile: placedProfile,
@@ -1751,9 +1712,11 @@ export default function App() {
       scope: "placement",
       correct,
       feedbackText: feedbackLine,
-      feedbackSpeech: feedbackLine,
+      feedbackSpeech: pedagogicalFeedback.audioText ?? feedbackLine,
       explanationText: explanation.text,
       explanationSpeech: explanation.speech,
+      nextActionText: pedagogicalFeedback.nextAction,
+      rescueText: pedagogicalFeedback.rescueSuggested ? learningScript.rescue.explanation : undefined,
       nextScreen: "placement",
       nextPlacement,
       bannerMessage: suspiciousFast
@@ -1788,10 +1751,19 @@ export default function App() {
     const suspiciousFast = responseTimeMs < currentTask.question.minResponseMs;
     const firstTryCorrect = taskAttemptState.attemptsUsed === 0;
     const canRetry = currentTask.mode === "example" || currentTask.mode === "practice";
+    const learningScript = getSkillLearningScript(getTaskSkill(currentTask));
 
     if (!correct && canRetry && firstTryCorrect) {
-      const retryFeedback = getAnswerFeedbackLine("retry");
-      playAnswerFeedback(retryFeedback);
+      const retryPedagogicalFeedback = buildPedagogicalFeedback({
+        question: currentTask.question,
+        script: learningScript,
+        correct,
+        suspiciousFast,
+        hintUsed: false,
+        firstTry: true
+      });
+      const retryFeedback = retryPedagogicalFeedback.headline;
+      playAnswerFeedback(retryPedagogicalFeedback.audioText ?? retryFeedback);
       setTaskAttemptState({
         attemptsUsed: 1
       });
@@ -1829,24 +1801,38 @@ export default function App() {
       bannerMessage = correct ? "Great job." : "Keep going. The next one is ready.";
     }
 
-    const explanation = buildReviewExplanation(currentTask.question, correct, suspiciousFast);
-    const feedbackLine = getAnswerFeedbackLine(correct ? "correct" : "final-wrong");
-    playAnswerFeedback(feedbackLine);
+    const pedagogicalFeedback = buildPedagogicalFeedback({
+      question: currentTask.question,
+      script: learningScript,
+      correct,
+      suspiciousFast,
+      hintUsed,
+      firstTry: firstTryCorrect
+    });
+    const explanation = {
+      text: pedagogicalFeedback.explanation,
+      speech: pedagogicalFeedback.audioText ?? pedagogicalFeedback.explanation
+    };
+    const feedbackLine = pedagogicalFeedback.headline;
+    playAnswerFeedback(pedagogicalFeedback.audioText ?? feedbackLine);
 
     setReviewState({
       scope: "practice",
       correct,
       feedbackText: feedbackLine,
-      feedbackSpeech: feedbackLine,
+      feedbackSpeech: pedagogicalFeedback.audioText ?? feedbackLine,
       explanationText: explanation.text,
       explanationSpeech: explanation.speech,
       noteText:
         result.notes.join(" ") ||
+        pedagogicalFeedback.nextAction ||
         (hintUsed
           ? firstTryCorrect
             ? "This round used support, so it does not count for mastery."
             : "This one was fixed after a mistake, so it does not count as a first-try mastery win."
           : undefined),
+      nextActionText: pedagogicalFeedback.nextAction ?? learningScript.nextStepAdvice.childMessage,
+      rescueText: pedagogicalFeedback.rescueSuggested ? learningScript.rescue.explanation : undefined,
       detailText: buildReviewDetails({
         question: currentTask.question,
         correct,
@@ -1933,7 +1919,10 @@ export default function App() {
         <button type="button" className="ghost-button" onClick={jumpHome}>
           Home
         </button>
-        <h1>FartMaths</h1>
+        <h1 className="brand-title">
+          <img src={toAssetUrl(APP_LOGO_SRC)} alt="" className="brand-logo" width="52" height="52" />
+          <span>FartMaths</span>
+        </h1>
         <button type="button" className="ghost-button" onClick={openParent}>
           Parent
         </button>
@@ -2073,6 +2062,7 @@ export default function App() {
       {screen === "home" ? (
         <section className="home-screen">
           <div className="hero card">
+            <img src={toAssetUrl(APP_LOGO_SRC)} alt="FartMaths logo" className="hero-logo" width="180" height="180" />
             <MiniBadge text="Silly fun. Serious learning." tone="peach" />
             <h2>Pick a kiddo to start today&apos;s math giggles.</h2>
             <p>Two big profiles, no passwords, and offline-ready play on one iPad.</p>
@@ -2138,7 +2128,7 @@ export default function App() {
                       <div className="section-heading">
                         <div>
                           <h3>Choose avatar</h3>
-                          <p>Tap one of the three profile pictures below.</p>
+                          <p>Tap one of the four ninja profile pictures below.</p>
                         </div>
                       </div>
                       <div className="avatar-picker">
@@ -2236,8 +2226,17 @@ export default function App() {
             {STRANDS.map((strand) => {
               const snapshot = getStrandSnapshot(activeChild, strand);
               const completion = getStrandCompletion(activeChild, strand.id);
+              const cardVisualStyle = strand.cardVisualSrc
+                ? ({
+                    "--category-card-visual": `url("${toAssetUrl(strand.cardVisualSrc)}")`
+                  } as CSSProperties)
+                : undefined;
               return (
-                <article key={strand.id} className="card category-card">
+                <article
+                  key={strand.id}
+                  className={`card category-card ${strand.cardVisualSrc ? "category-card-visual" : ""}`}
+                  style={cardVisualStyle}
+                >
                   <div className="category-card-top">
                     <div>
                       <MiniBadge text={snapshot.readiness} tone="blue" />
@@ -2288,6 +2287,7 @@ export default function App() {
               strandId: currentPlacementProbe.strandId,
               level: currentPlacementProbe.level
             }}
+            learningScript={currentPlacementLearningScript!}
             hintVisible={false}
             reviewState={reviewState}
             ttsEnabled={persistedState.settings.ttsEnabled}
@@ -2295,7 +2295,14 @@ export default function App() {
             onSpeakInstruction={() => speech.speak({ channel: "instruction", text: currentPlacementProbe.question.speech })}
             onSpeakChoices={() => speech.speak({ channel: "choices", text: getChoiceSpeech(currentPlacementProbe.question) })}
             onSpeakHint={() => speech.speak({ channel: "hint", text: currentPlacementProbe.question.hintSpeech ?? currentPlacementProbe.question.hint })}
-            onSpeakLesson={() => speech.speak({ channel: "explanation", text: currentPlacementProbe.question.explanation.speech })}
+            onSpeakLesson={() =>
+              speech.speak({
+                channel: "explanation",
+                text: currentPlacementLearningScript
+                  ? getLearningScriptSpeech(currentPlacementLearningScript)
+                  : currentPlacementProbe.question.explanation.speech
+              })
+            }
             onSpeakFeedback={() => speech.speak({ channel: "feedback", text: reviewState?.feedbackSpeech ?? "" })}
             onSpeakExplanation={() => speech.speak({ channel: "explanation", text: reviewState?.explanationSpeech ?? "" })}
             onOpenReviewDetails={() => setReviewDetailOpen(true)}
@@ -2320,6 +2327,7 @@ export default function App() {
           <TaskScreen
             key={currentTask.question.id}
             task={currentTask}
+            learningScript={currentTaskLearningScript!}
             hintVisible={hintVisible}
             reviewState={reviewState}
             ttsEnabled={persistedState.settings.ttsEnabled}
@@ -2327,7 +2335,14 @@ export default function App() {
             onSpeakInstruction={() => speech.speak({ channel: "instruction", text: currentTask.question.speech })}
             onSpeakChoices={() => speech.speak({ channel: "choices", text: getChoiceSpeech(currentTask.question) })}
             onSpeakHint={() => speech.speak({ channel: "hint", text: currentTask.question.hintSpeech ?? currentTask.question.hint })}
-            onSpeakLesson={() => speech.speak({ channel: "explanation", text: currentTask.question.explanation.speech })}
+            onSpeakLesson={() =>
+              speech.speak({
+                channel: "explanation",
+                text: currentTaskLearningScript
+                  ? getLearningScriptSpeech(currentTaskLearningScript)
+                  : currentTask.question.explanation.speech
+              })
+            }
             onSpeakFeedback={() => speech.speak({ channel: "feedback", text: reviewState?.feedbackSpeech ?? "" })}
             onSpeakExplanation={() => speech.speak({ channel: "explanation", text: reviewState?.explanationSpeech ?? "" })}
             onOpenReviewDetails={() => setReviewDetailOpen(true)}

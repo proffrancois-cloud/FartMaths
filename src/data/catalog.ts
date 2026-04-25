@@ -8,33 +8,42 @@ import type {
   StrandDefinition,
   StrandId
 } from "../types";
+import { SKILL_PEDAGOGICAL_UX_BY_ID } from "./pedagogicalUxMapping";
 
 export const SESSION_LENGTHS = [5, 8, 10] as const;
 
 export const AVATARS: AvatarDefinition[] = [
   {
-    id: "farting-emoji",
-    label: "Fart Dash",
-    description: "A speedy emoji with little fart clouds behind it.",
-    accent: "#68cf9a",
-    glow: "rgba(125, 255, 198, 0.4)",
-    imageSrc: "/avatars/farting-emoji.png"
+    id: "ninja-diaper",
+    label: "Ninja Diaper",
+    description: "A bright blue diaper ninja ready to jump into math.",
+    accent: "#2bb4f0",
+    glow: "rgba(43, 180, 240, 0.28)",
+    imageSrc: "/avatars/ninja-diaper.png"
   },
   {
-    id: "pooping-emoji",
-    label: "Toilet Plop",
-    description: "A squishy emoji sitting on the toilet and trying very hard.",
-    accent: "#7c4d23",
-    glow: "rgba(255, 194, 102, 0.45)",
-    imageSrc: "/avatars/pooping-emoji.png"
+    id: "ninja-pipi",
+    label: "Ninja Pipi",
+    description: "A sunny yellow ninja with speedy splash moves.",
+    accent: "#f5c81d",
+    glow: "rgba(245, 200, 29, 0.3)",
+    imageSrc: "/avatars/ninja-pipi.png"
   },
   {
-    id: "toilet-roll-hero",
-    label: "Nose Pinch Roll",
-    description: "A toilet roll pinching its nose at the stinkiest math jokes.",
-    accent: "#7fd4ff",
-    glow: "rgba(115, 204, 255, 0.48)",
-    imageSrc: "/avatars/toilet-roll-hero.png"
+    id: "ninja-poo",
+    label: "Ninja Poo",
+    description: "A brave brown ninja with a sharp math sword.",
+    accent: "#8b4a20",
+    glow: "rgba(139, 74, 32, 0.28)",
+    imageSrc: "/avatars/ninja-poo.png"
+  },
+  {
+    id: "ninja-stinky",
+    label: "Ninja Stinky",
+    description: "A green cloud ninja who sneaks through tricky questions.",
+    accent: "#60b73f",
+    glow: "rgba(96, 183, 63, 0.3)",
+    imageSrc: "/avatars/ninja-stinky.png"
   }
 ];
 
@@ -94,13 +103,13 @@ export const PROFILE_PRESETS = [
     id: "ely",
     displayName: "Ély",
     aliases: ["ely", "ély"],
-    defaultAvatarId: "farting-emoji"
+    defaultAvatarId: "ninja-stinky"
   },
   {
     id: "ira",
     displayName: "Ira",
     aliases: ["ira"],
-    defaultAvatarId: "pooping-emoji"
+    defaultAvatarId: "ninja-poo"
   }
 ] as const;
 
@@ -112,6 +121,7 @@ interface StrandSeed {
   mascot: string;
   description: string;
   activityType: ActivityType;
+  cardVisualSrc?: string;
   concrete: string;
   pictorial: string;
   abstract: string;
@@ -183,6 +193,7 @@ const STRAND_SEEDS: StrandSeed[] = [
     mascot: "Fart Cloud Parade",
     description: "See numerals, count forward, and build flexible number sense.",
     activityType: "drag-to-match",
+    cardVisualSrc: "/visuals/Card1_counting.png",
     concrete: "Count fart clouds and poopy diapers one touch at a time.",
     pictorial: "Match spoken numbers to bright numeral cards and picture sets.",
     abstract: "Read, order, and skip-count without concrete counters every time.",
@@ -237,6 +248,7 @@ const STRAND_SEEDS: StrandSeed[] = [
     mascot: "Poop Parade Buckets",
     description: "Know that the last number counted tells how many there are.",
     activityType: "count-and-tap",
+    cardVisualSrc: "/visuals/Card2_Cardinality.png",
     concrete: "Tap each object once so every silly token has a counted home.",
     pictorial: "Count rows, arrays, and scattered items without losing track.",
     abstract: "Recognize total amounts in equal groups and place-value blocks.",
@@ -300,6 +312,7 @@ const STRAND_SEEDS: StrandSeed[] = [
     mascot: "Bubble Battle",
     description: "Compare sets and numerals with meaning before symbols.",
     activityType: "compare-two-groups",
+    cardVisualSrc: "/visuals/Card3_Comparing.png",
     concrete: "Look at two silly groups and decide who has more, less, or the same.",
     pictorial: "Use pictures, bars, and lines to compare close quantities.",
     abstract: "Compare numerals using place value and symbols with confidence.",
@@ -352,6 +365,7 @@ const STRAND_SEEDS: StrandSeed[] = [
     mascot: "Toilet Stall Ten-Frame",
     description: "Build addition and subtraction from joining, separating, and making tens.",
     activityType: "fill-ten-frame",
+    cardVisualSrc: "/visuals/Card4_addsubstract.png",
     concrete: "Join or take away visual tokens with big touch targets and instant models.",
     pictorial: "Use ten-frames, number lines, and drawings to make thinking visible.",
     abstract: "Work with missing numbers, mental jumps, and larger place-value moves.",
@@ -409,6 +423,7 @@ const STRAND_SEEDS: StrandSeed[] = [
     mascot: "Bundle Builder",
     description: "See how ones bundle into tens and tens bundle into hundreds.",
     activityType: "build-a-number",
+    cardVisualSrc: "/visuals/Card5_placevalue.png",
     concrete: "Bundle toilet rolls and poop nuggets into ones, tens, and hundreds.",
     pictorial: "Match base-ten drawings with written numerals and expanded views.",
     abstract: "Use place-value language, compare numbers, and shift by +10 or +100.",
@@ -457,6 +472,7 @@ const STRAND_SEEDS: StrandSeed[] = [
     mascot: "Story Toilet Theater",
     description: "Use visual scenes and spoken stories to choose or build the right math.",
     activityType: "story-scene",
+    cardVisualSrc: "/visuals/Card6_wordproblem.png",
     concrete: "Act out short stories with pictures before looking at equations.",
     pictorial: "Match a spoken story to a visual scene, model, or equation.",
     abstract: "Reason through one-step and two-step stories across several strands.",
@@ -518,6 +534,7 @@ const STRAND_SEEDS: StrandSeed[] = [
     mascot: "Toilet Paper Worm Race",
     description: "Compare, measure, and pick the right tool or unit.",
     activityType: "choose-the-answer",
+    cardVisualSrc: "/visuals/Card7_measurement.png",
     concrete: "Use language like longer or heavier while touching real-looking visual objects.",
     pictorial: "Drag unit tiles and compare picture lengths with big clear visuals.",
     abstract: "Measure with rulers, solve length problems, and choose efficient tools.",
@@ -566,6 +583,7 @@ const STRAND_SEEDS: StrandSeed[] = [
     mascot: "Bath Time Clock Club",
     description: "Move from time-order words to clocks, schedules, and five-minute reasoning.",
     activityType: "clock-choice",
+    cardVisualSrc: "/visuals/Card8_time.png",
     concrete: "Talk about what comes before, after, first, and next in daily life.",
     pictorial: "Read big friendly analog clocks, then match to digital times.",
     abstract: "Use five-minute intervals and solve simple time stories.",
@@ -614,6 +632,7 @@ const STRAND_SEEDS: StrandSeed[] = [
     mascot: "Piggy Toilet Bank",
     description: "Recognize coins and bills, count values, and solve simple money totals.",
     activityType: "coin-counting",
+    cardVisualSrc: "/visuals/Card9_money.png",
     concrete: "Sort coins by how they look before worrying about totals.",
     pictorial: "Count like coins and mixed coins with friendly visuals and price tags.",
     abstract: "Make exact amounts and solve simple money stories with coins and bills.",
@@ -687,6 +706,7 @@ const STRAND_SEEDS: StrandSeed[] = [
     mascot: "Stink Bar Chart",
     description: "Sort data, count categories, and read simple graphs for comparison questions.",
     activityType: "graph-reading",
+    cardVisualSrc: "/visuals/Card10_DataGraphs.png",
     concrete: "Sort snacks, toys, and tokens into categories before drawing graphs.",
     pictorial: "Read picture graphs and bar graphs with one question at a time.",
     abstract: "Create graphs and solve more/fewer questions from the data shown.",
@@ -756,6 +776,7 @@ const STRAND_SEEDS: StrandSeed[] = [
     mascot: "Shape Sort Sewer",
     description: "Recognize, build, sort, and combine 2D and 3D shapes.",
     activityType: "shape-sort",
+    cardVisualSrc: "/visuals/Card11_geometry.png",
     concrete: "Touch and sort big shapes by obvious features first.",
     pictorial: "Notice sides, corners, solids, and shapes in new orientations.",
     abstract: "Compose shapes and use attributes to explain thinking.",
@@ -806,6 +827,7 @@ const STRAND_SEEDS: StrandSeed[] = [
     mascot: "Fair Slice Feast",
     description: "See fair shares first, then connect them to early fraction language.",
     activityType: "choose-the-answer",
+    cardVisualSrc: "/visuals/Card12_equalshare.png",
     concrete: "Look for fair and unfair sharing in familiar shapes and snacks.",
     pictorial: "Choose halves, fourths, and thirds from shaded visual models.",
     abstract: "Match unit fraction names and compare simple equal-share models.",
@@ -882,6 +904,7 @@ const STRAND_SEEDS: StrandSeed[] = [
     mascot: "Sock Pair Station",
     description: "Make pairs, see equal groups, build arrays, and connect to equations.",
     activityType: "array-counting",
+    cardVisualSrc: "/visuals/Card13_evenoddsarray.png",
     concrete: "Pair objects and build equal groups with touchable tokens.",
     pictorial: "Use arrays and repeated-addition visuals to organize counting.",
     abstract: "Write equations for arrays, even numbers, and grouped totals.",
@@ -976,15 +999,21 @@ export const STRANDS: StrandDefinition[] = STRAND_SEEDS.map((seed) => {
     color: seed.color,
     mascot: seed.mascot,
     description: seed.description,
+    cardVisualSrc: seed.cardVisualSrc,
     levels: seed.summaries.map((summary, index) => {
       const level = index + 1;
+      const skillId = makeSkillId(seed.id, level);
       const alignment = seed.ccss[index];
+      const pedagogicalUx = SKILL_PEDAGOGICAL_UX_BY_ID[skillId];
       if (!alignment) {
         throw new Error(`Missing CCSS alignment for ${seed.id} level ${level}`);
       }
+      if (!pedagogicalUx) {
+        throw new Error(`Missing pedagogical UX mapping for ${skillId}`);
+      }
 
       return {
-        id: makeSkillId(seed.id, level),
+        id: skillId,
         strandId: seed.id,
         level,
         title: summary.replace(/\.$/, ""),
@@ -997,6 +1026,8 @@ export const STRANDS: StrandDefinition[] = STRAND_SEEDS.map((seed) => {
         isExtension: alignment.isExtension,
         alignmentNotes: alignment.alignmentNotes,
         constraints: alignment.constraints,
+        pedagogicalUxProfileId: pedagogicalUx.profileId,
+        pedagogicalUx,
         scaffold: {
           concrete: seed.concrete,
           pictorial: seed.pictorial,

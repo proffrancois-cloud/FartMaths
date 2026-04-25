@@ -19,10 +19,13 @@ import type {
 const STORAGE_KEY = "fartmaths-state-v1";
 
 const LEGACY_AVATAR_MAP = {
-  "fart-cloud": "farting-emoji",
-  "happy-poop": "pooping-emoji",
-  "butt-monster": "toilet-roll-hero",
-  "smiling-toilet": "toilet-roll-hero"
+  "fart-cloud": "ninja-stinky",
+  "happy-poop": "ninja-poo",
+  "butt-monster": "ninja-diaper",
+  "smiling-toilet": "ninja-diaper",
+  "farting-emoji": "ninja-stinky",
+  "pooping-emoji": "ninja-poo",
+  "toilet-roll-hero": "ninja-diaper"
 } as const;
 
 const safeWindow = () => (typeof window === "undefined" ? undefined : window);

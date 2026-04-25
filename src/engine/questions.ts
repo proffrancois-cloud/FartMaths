@@ -1,5 +1,12 @@
 import { STRAND_MAP } from "../data/catalog";
 import { ACTIVITY_MIN_RESPONSE_MS } from "../data/rules";
+import {
+  createQuestionGenerationPlan,
+  getQuestionValidationErrors,
+  validateGeneratedQuestion,
+  type QuestionGenerationPlan,
+  type QuestionValidationIssue
+} from "./questionPlan";
 import type {
   ActivityType,
   AnswerChoice,
@@ -101,17 +108,26 @@ const numberToWords = (value: number): string => {
 };
 
 const uniqueNumbers = (correct: number, count: number, min: number, max: number) => {
+  let lower = Math.min(min, correct);
+  let upper = Math.max(max, correct);
+  while (upper - lower + 1 < count) {
+    lower = Math.max(0, lower - 1);
+    upper += 1;
+  }
+
   const values = new Set<number>([correct]);
-  while (values.size < count) {
-    values.add(rand(min, max));
+  while (values.size < count && values.size < upper - lower + 1) {
+    values.add(rand(lower, upper));
   }
   return shuffle([...values]);
 };
 
 const uniqueValues = (count: number, min: number, max: number) => {
+  let lower = min;
+  let upper = Math.max(max, min + count - 1);
   const values = new Set<number>();
-  while (values.size < count) {
-    values.add(rand(min, max));
+  while (values.size < count && values.size < upper - lower + 1) {
+    values.add(rand(lower, upper));
   }
   return shuffle([...values]);
 };
@@ -1337,37 +1353,815 @@ const arraysQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDef
   };
 };
 
-export const generateQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
-  switch (skill.strandId) {
-    case "number-recognition":
-      return numberRecognitionQuestion(skill, mode);
-    case "cardinality":
-      return cardinalityQuestion(skill, mode);
-    case "comparing":
-      return comparingQuestion(skill, mode);
-    case "addition-subtraction":
-      return additionSubtractionQuestion(skill, mode);
-    case "place-value":
-      return placeValueQuestion(skill, mode);
-    case "word-problems":
-      return wordProblemQuestion(skill, mode);
-    case "measurement":
-      return measurementQuestion(skill, mode);
-    case "time":
-      return timeQuestion(skill, mode);
-    case "money":
-      return moneyQuestion(skill, mode);
-    case "data-graphs":
-      return graphQuestion(skill, mode);
-    case "geometry":
-      return geometryQuestion(skill, mode);
-    case "equal-shares":
-      return equalSharesQuestion(skill, mode);
-    case "arrays-odd-even":
-      return arraysQuestion(skill, mode);
-    default:
-      return numberRecognitionQuestion(skill, mode);
+type PlanBaseConfig = Parameters<typeof buildBase>[2] & {
+  supportText?: string;
+};
+
+const choiceLimit = (plan: QuestionGenerationPlan) =>
+  plan.constraints.maxChoices ?? (plan.skill.level <= 3 ? 3 : 4);
+
+const supportTextForPlan = (plan: QuestionGenerationPlan) => {
+  if (plan.mode === "example") {
+    return plan.uxProfile.lessonFocus;
   }
+  if (plan.mode === "check" || plan.mode === "placement") {
+    return plan.uxProfile.masteryCheck;
+  }
+  return plan.uxProfile.learningGoal;
+};
+
+const buildBaseForPlan = (
+  plan: QuestionGenerationPlan,
+  config: PlanBaseConfig
+) => ({
+  ...buildBase(plan.skill, plan.mode, config),
+  supportText: config.supportText ?? supportTextForPlan(plan)
+});
+
+const planMaxNumber = (plan: QuestionGenerationPlan, fallback: number) =>
+  Math.max(plan.constraints.minNumber ?? 0, plan.constraints.maxNumber ?? fallback);
+
+const constrainedNumber = (
+  plan: QuestionGenerationPlan,
+  fallbackMax: number,
+  min = plan.constraints.minNumber ?? 1
+) => rand(min, Math.max(min, Math.min(planMaxNumber(plan, fallbackMax), fallbackMax)));
+
+const constrainedObjectCount = (plan: QuestionGenerationPlan, fallbackMax: number) =>
+  rand(1, Math.max(1, Math.min(plan.constraints.maxObjects ?? fallbackMax, fallbackMax)));
+
+const planNumberChoices = (
+  plan: QuestionGenerationPlan,
+  correct: number,
+  min: number,
+  max: number
+) => numberChoices(correct, Math.max(0, min), Math.max(correct, max), choiceLimit(plan));
+
+const limitChoicesKeepingCorrect = <T extends AnswerChoice>(
+  choices: T[],
+  correctChoiceId: string,
+  maxChoices: number
+) => {
+  const correct = choices.find((choice) => choice.id === correctChoiceId);
+  const distractors = choices.filter((choice) => choice.id !== correctChoiceId);
+  return shuffle(correct ? [correct, ...distractors.slice(0, maxChoices - 1)] : choices.slice(0, maxChoices));
+};
+
+const commonShapes: ShapeKind[] = ["circle", "square", "triangle", "rectangle", "hexagon"];
+
+const shapePoolForPlan = (plan: QuestionGenerationPlan): ShapeKind[] => {
+  if (plan.skill.level <= 1) return ["circle", "square", "triangle"];
+  if (plan.skill.level === 2) return ["rectangle", "hexagon", "cube", "sphere", "cylinder", "cone"];
+  if (plan.skill.level >= 8) return ["circle", "square", "triangle", "rectangle", "quadrilateral", "pentagon", "hexagon"];
+  return commonShapes;
+};
+
+const equalShareChoices = (correctId: string, count: number): AnswerChoice[] => {
+  const choices = [
+    {
+      id: "choice-equal-halves",
+      label: "Same-size halves",
+      speechLabel: "Same-size halves",
+      value: "equal-halves",
+      renderKind: "fraction" as const,
+      partition: { shape: "circle" as const, parts: 2, equal: true, highlightedParts: 1 }
+    },
+    {
+      id: "choice-unequal-pieces",
+      label: "Different-size pieces",
+      speechLabel: "Different-size pieces",
+      value: "unequal-pieces",
+      renderKind: "fraction" as const,
+      partition: { shape: "circle" as const, parts: 2, equal: false, highlightedParts: 1 }
+    },
+    {
+      id: "choice-equal-fourths",
+      label: "Same-size fourths",
+      speechLabel: "Same-size fourths",
+      value: "equal-fourths",
+      renderKind: "fraction" as const,
+      partition: { shape: "rectangle" as const, parts: 4, equal: true, highlightedParts: 1 }
+    },
+    {
+      id: "choice-three-fair-shares",
+      label: "Three fair shares",
+      speechLabel: "Three fair shares",
+      value: "three-fair-shares",
+      renderKind: "fraction" as const,
+      partition: { shape: "circle" as const, parts: 3, equal: true, highlightedParts: 1 }
+    }
+  ];
+  return limitChoicesKeepingCorrect(choices, correctId, count);
+};
+
+const equalShareCorrectId = (plan: QuestionGenerationPlan) => {
+  if (plan.uxProfileId.includes("third")) return "choice-three-fair-shares";
+  if (plan.uxProfileId.includes("fourth") || plan.uxProfileId.includes("quarter")) return "choice-equal-fourths";
+  return plan.uxProfileId.includes("unequal") || plan.uxProfileId.includes("equal-vs-unequal")
+    ? "choice-equal-halves"
+    : "choice-equal-halves";
+};
+
+const generateCountAndTapFromPlan = (plan: QuestionGenerationPlan): QuestionDefinition => {
+  const counter = sample(themeCounters);
+  const layout =
+    plan.visualModel === "objects-scattered"
+      ? "scattered"
+      : plan.visualModel === "array-grid"
+        ? "array"
+        : sample(["line", "array", "circle"] as const);
+  const max = layout === "scattered"
+    ? plan.constraints.maxScatteredObjects ?? 10
+    : plan.constraints.maxArrangedObjects ?? plan.constraints.maxObjects ?? 10;
+  const total = rand(1, Math.max(1, Math.min(max, plan.skill.level <= 2 ? 5 : 20)));
+
+  return {
+    ...buildBaseForPlan(plan, {
+      prompt: `Tap each ${counter.singular} one time, then press Done.`,
+      speech: `Tap each ${counter.singular} one time, then press done.`,
+      hint: `Touch each ${counter.singular} once. Do not tap the same one twice.`,
+      explanation: makeExplanation(
+        `There are ${themedCountLabel(total, counter)}, so the total is ${total}.`,
+        String(total)
+      ),
+      activityType: "count-and-tap"
+    }),
+    choices: [],
+    correctChoiceId: `count-${total}`,
+    countTap: {
+      total,
+      token: counter.token,
+      color: "#7ed89f",
+      layout
+    },
+    groups: [
+      {
+        id: randomId(),
+        count: total,
+        token: counter.token,
+        color: "#7ed89f",
+        label: "Count"
+      }
+    ]
+  };
+};
+
+const generateClockFromPlan = (plan: QuestionGenerationPlan): QuestionDefinition => {
+  const minutePool = plan.constraints.allowedMinuteIncrements ?? [0, 30];
+  const hour = rand(1, 12);
+  const minute = sample(minutePool);
+  const dayPart = plan.skill.constraints?.requireAmPm ? sample(["a.m.", "p.m."] as const) : "";
+  const label = `${hour}:${String(minute).padStart(2, "0")}${dayPart ? ` ${dayPart}` : ""}`;
+  const choices = new Map<string, ClockChoiceData>();
+  choices.set(label, { targetHour: hour, targetMinute: minute, label });
+
+  while (choices.size < choiceLimit(plan)) {
+    const maybeHour = rand(1, 12);
+    const maybeMinute = sample(minutePool);
+    const maybeLabel = `${maybeHour}:${String(maybeMinute).padStart(2, "0")}${dayPart ? ` ${dayPart}` : ""}`;
+    choices.set(maybeLabel, { targetHour: maybeHour, targetMinute: maybeMinute, label: maybeLabel });
+  }
+
+  const clockChoices = shuffle([...choices.values()]);
+  const spoken = describeTime(hour, minute);
+
+  return {
+    ...buildBaseForPlan(plan, {
+      prompt: `Tap the clock that shows ${spoken}${dayPart ? ` ${dayPart}` : ""}.`,
+      speech: `Tap the clock that shows ${spoken}${dayPart ? ` ${dayPart}` : ""}.`,
+      hint: "Look at the short hand first, then the long hand.",
+      explanation: makeExplanation(
+        `The short hand and long hand show ${label}.`,
+        label
+      ),
+      activityType: "clock-choice",
+      layout: "clock-grid"
+    }),
+    choices: clockChoices.map((choice) => ({
+      id: `clock-${choice.label}`,
+      label: choice.label,
+      speechLabel: describeTime(choice.targetHour, choice.targetMinute),
+      value: choice.label,
+      renderKind: "clock"
+    })),
+    correctChoiceId: `clock-${label}`,
+    clockChoices
+  };
+};
+
+const generateCoinChoiceFromPlan = (plan: QuestionGenerationPlan): QuestionDefinition => {
+  const coinKinds = plan.constraints.allowedCoinKinds ?? ["penny", "nickel", "dime", "quarter"];
+  const targetKind = sample(coinKinds);
+  const choiceKinds = shuffle([...new Set(coinKinds)]).slice(0, choiceLimit(plan));
+  if (!choiceKinds.includes(targetKind)) {
+    choiceKinds[0] = targetKind;
+  }
+  const choices = shuffle(choiceKinds).map((kind) => ({
+    id: kind === targetKind ? `correct-${kind}` : `choice-${kind}`,
+    label: coinLibrary[kind].label,
+    speechLabel: coinLibrary[kind].label,
+    value: kind,
+    renderKind: "coin" as const,
+    coin: kind,
+    numericValue: coinLibrary[kind].value
+  }));
+
+  return {
+    ...buildBaseForPlan(plan, {
+      prompt: `Choose the ${coinLibrary[targetKind].label.toLowerCase()} coin.`,
+      speech: `Choose the ${coinLibrary[targetKind].label.toLowerCase()} coin.`,
+      hint: "Look at the coin name, color, and size.",
+      explanation: makeExplanation(
+        `The ${coinLibrary[targetKind].label.toLowerCase()} is worth ${moneyLabel(coinLibrary[targetKind].value)}.`,
+        coinLibrary[targetKind].label
+      ),
+      activityType: "choose-the-answer"
+    }),
+    choices: limitChoicesKeepingCorrect(choices, `correct-${targetKind}`, choiceLimit(plan)),
+    correctChoiceId: `correct-${targetKind}`
+  };
+};
+
+const generateCoinCountingFromPlan = (plan: QuestionGenerationPlan): QuestionDefinition => {
+  const coinKinds = plan.constraints.allowedCoinKinds ?? ["penny", "nickel", "dime", "quarter"];
+  const maxTotal = plan.constraints.maxNumber ?? 100;
+  let coins: CoinVisual[] = [];
+  let total = 0;
+
+  while (coins.length < (plan.skill.level >= 7 ? 4 : 3) && total < maxTotal) {
+    const kind = sample(coinKinds);
+    if (total + coinLibrary[kind].value > maxTotal && coins.length > 0) break;
+    coins = [...coins, { ...coinLibrary[kind], id: `coin-${coins.length}-${kind}` }];
+    total += coinLibrary[kind].value;
+  }
+
+  if (coins.length === 0) {
+    const kind = coinKinds[0] ?? "penny";
+    coins = [{ ...coinLibrary[kind], id: `coin-0-${kind}` }];
+    total = coinLibrary[kind].value;
+  }
+
+  return {
+    ...buildBaseForPlan(plan, {
+      prompt: "How much money is shown?",
+      speech: "How much money is shown?",
+      hint: "Count the biggest coins first, then add the rest.",
+      explanation: makeExplanation(
+        `The coins add up to ${moneyLabel(total)}.`,
+        moneyLabel(total)
+      ),
+      activityType: "coin-counting"
+    }),
+    choices: limitChoicesKeepingCorrect(moneyChoices(total), `choice-${total}`, choiceLimit(plan)),
+    correctChoiceId: `choice-${total}`,
+    coins
+  };
+};
+
+const generateShapeChoiceFromPlan = (plan: QuestionGenerationPlan, activityType: ActivityType): QuestionDefinition => {
+  const pool = shapePoolForPlan(plan);
+  const correct = sample(pool);
+  const choices = shuffle([correct, ...shuffle(pool.filter((shape) => shape !== correct)).slice(0, choiceLimit(plan) - 1)]).map((shape) =>
+    shapeChoice(shape, shape === correct ? "correct" : "choice")
+  );
+  const prompt = activityType === "shape-sort" ? `Drag the ${correct} to the shape bin.` : `Choose the ${correct}.`;
+
+  return {
+    ...buildBaseForPlan(plan, {
+      prompt,
+      speech: prompt,
+      hint: "Look at sides, corners, and whether it is flat or solid.",
+      explanation: makeExplanation(
+        `The correct shape is ${correct} because its defining attributes match the name.`,
+        correct
+      ),
+      activityType,
+      supportText: plan.uxProfile.learningGoal
+    }),
+    choices,
+    correctChoiceId: `correct-${correct}`,
+    targetLabel: `${correct} bin`,
+    ...(activityType === "shape-sort" || activityType === "drag-to-match"
+      ? { drag: buildDragChoices(choices, `${correct} bin`) }
+      : {})
+  };
+};
+
+const generateEqualShareFromPlan = (plan: QuestionGenerationPlan, activityType: ActivityType): QuestionDefinition => {
+  const correctId = equalShareCorrectId(plan);
+  const choices = equalShareChoices(correctId, choiceLimit(plan));
+  const correctChoice = choices.find((choice) => choice.id === correctId) ?? choices[0];
+  const prompt = activityType === "drag-to-match"
+    ? "Drag the fair-share picture to the tray."
+    : "Which picture shows fair shares?";
+
+  return {
+    ...buildBaseForPlan(plan, {
+      prompt,
+      speech: prompt,
+      hint: "Fair shares are the same size.",
+      explanation: makeExplanation(
+        `${correctChoice.label} shows equal-size pieces, so it shows fair shares.`,
+        correctChoice.label
+      ),
+      activityType
+    }),
+    choices,
+    correctChoiceId: correctChoice.id,
+    ...(activityType === "drag-to-match" ? { drag: buildDragChoices(choices, "Fair-share tray") } : {})
+  };
+};
+
+const generateGraphFromPlan = (plan: QuestionGenerationPlan): QuestionDefinition => {
+  const allLabels = ["Corn", "Beans", "Toast", "Apples"];
+  const categoryCount = Math.min(plan.constraints.maxGraphCategories ?? 4, choiceLimit(plan), allLabels.length);
+  const labels = allLabels.slice(0, categoryCount);
+  const values = uniqueValues(labels.length, 1, Math.max(4, 2 + plan.skill.level));
+  const bars: GraphBar[] = labels.map((label, index) => ({
+    label,
+    value: values[index],
+    color: ["#7ed89f", "#7dc6ff", "#ffbc67", "#ff8cb1"][index]
+  }));
+  const winningBar = [...bars].sort((left, right) => right.value - left.value)[0];
+
+  return {
+    ...buildBaseForPlan(plan, {
+      prompt: "Which category has the most?",
+      speech: "Which category has the most?",
+      hint: "Look for the tallest bar or biggest picture row.",
+      explanation: makeExplanation(
+        `${winningBar.label} has ${winningBar.value}, which is the most.`,
+        winningBar.label
+      ),
+      activityType: "graph-reading"
+    }),
+    choices: bars.map((bar) => ({
+      id: `bar-${bar.label}`,
+      label: bar.label,
+      speechLabel: bar.label,
+      value: bar.label,
+      renderKind: "text" as const
+    })),
+    correctChoiceId: `bar-${winningBar.label}`,
+    graph: {
+      graphKind: plan.skill.constraints?.allowedLayouts?.includes("line-plot")
+        ? "line-plot"
+        : plan.skill.constraints?.allowedLayouts?.includes("picture-graph")
+          ? "picture-graph"
+          : "bar-graph",
+      bars,
+      question: "Which category has the most?"
+    }
+  };
+};
+
+const generateNumberLineFromPlan = (plan: QuestionGenerationPlan): QuestionDefinition => {
+  const max = Math.min(plan.constraints.maxNumber ?? 30, plan.skill.level >= 8 ? 120 : plan.skill.level >= 4 ? 50 : 20);
+  const target = constrainedNumber(plan, max, plan.skill.strandId === "number-recognition" ? 0 : 1);
+  const start = Math.max(0, target - 5);
+  const end = Math.max(start + 8, Math.min(max, target + 5));
+
+  return {
+    ...buildBaseForPlan(plan, {
+      prompt: `Tap ${target} on the number line.`,
+      speech: `Tap ${numberToWords(target)} on the number line.`,
+      hint: "Start at the left and count the stops in order.",
+      explanation: makeExplanation(
+        `${target} is the marked number on the number line.`,
+        String(target)
+      ),
+      activityType: "number-line-tap"
+    }),
+    choices: Array.from({ length: end - start + 1 }, (_, index) => {
+      const value = start + index;
+      return {
+        id: `choice-${value}`,
+        label: String(value),
+        speechLabel: numberToWords(value),
+        value,
+        renderKind: "number" as const
+      };
+    }),
+    correctChoiceId: `choice-${target}`,
+    numberLine: {
+      start,
+      end,
+      target,
+      jump: target - start
+    }
+  };
+};
+
+const generateCompareFromPlan = (plan: QuestionGenerationPlan): QuestionDefinition => {
+  const max = Math.min(plan.constraints.maxObjects ?? 20, 20);
+  const [left, right] = uniqueValues(2, 1, Math.max(2, max));
+  const relation = left === right ? "Same" : left > right ? "Left" : "Right";
+  const counter = sample(themeCounters);
+  const choices = [
+    { id: "choice-left", label: "Left", speechLabel: "Left", value: "left", renderKind: "position" as const },
+    { id: "choice-right", label: "Right", speechLabel: "Right", value: "right", renderKind: "position" as const },
+    { id: "choice-same", label: "Same", speechLabel: "Same", value: "same", renderKind: "position" as const }
+  ].slice(0, choiceLimit(plan));
+
+  return {
+    ...buildBaseForPlan(plan, {
+      prompt: "Which side has more?",
+      speech: "Which side has more?",
+      hint: "Count both sides, then compare.",
+      explanation: makeExplanation(
+        `Left has ${left} and right has ${right}, so ${relation.toLowerCase()} is correct.`,
+        relation
+      ),
+      activityType: "compare-two-groups",
+      layout: "left-right"
+    }),
+    choices,
+    correctChoiceId: relation === "Left" ? "choice-left" : relation === "Right" ? "choice-right" : "choice-same",
+    groups: groupsFromCounts(left, right, "Left", "Right", counter.token)
+  };
+};
+
+const generateTenFrameFromPlan = (plan: QuestionGenerationPlan): QuestionDefinition => {
+  const filled = rand(1, 8);
+  const target = 10;
+
+  return {
+    ...buildBaseForPlan(plan, {
+      prompt: "Fill the ten-frame to make 10.",
+      speech: "Fill the ten-frame to make ten.",
+      hint: "A full ten-frame has 10 spaces.",
+      explanation: makeExplanation(
+        `${filled} filled spaces and ${target - filled} empty spaces make 10.`,
+        String(target)
+      ),
+      activityType: "fill-ten-frame"
+    }),
+    choices: [],
+    correctChoiceId: `fill-${target}`,
+    tenFrame: {
+      target,
+      filled
+    }
+  };
+};
+
+const generateBuildNumberFromPlan = (plan: QuestionGenerationPlan): QuestionDefinition => {
+  const max = plan.constraints.maxNumber ?? (plan.skill.gradeBand === "G2" ? 1000 : 120);
+  const target = max >= 1000 ? rand(100, 999) : max >= 100 ? rand(10, Math.min(120, max)) : rand(10, Math.min(19, max));
+  const hundreds = Math.floor(target / 100);
+  const tens = Math.floor((target % 100) / 10);
+  const ones = target % 10;
+
+  return {
+    ...buildBaseForPlan(plan, {
+      prompt: `Build ${target}.`,
+      speech: `Build ${numberToWords(target)}.`,
+      hint: "Count hundreds first, then tens, then ones.",
+      explanation: makeExplanation(
+        `${hundreds} hundreds, ${tens} tens, and ${ones} ones make ${target}.`,
+        String(target)
+      ),
+      activityType: "build-a-number"
+    }),
+    choices: [],
+    correctChoiceId: `choice-${target}`,
+    buildNumber: {
+      hundreds,
+      tens,
+      ones,
+      target
+    }
+  };
+};
+
+const generateStoryFromPlan = (plan: QuestionGenerationPlan): QuestionDefinition => {
+  const max = Math.min(plan.constraints.maxNumber ?? 20, plan.skill.gradeBand === "G2" ? 100 : plan.skill.gradeBand === "G1" ? 20 : 10);
+  const visualMax = Math.min(max, plan.constraints.maxObjects ?? 20, 20);
+  const start = rand(1, Math.max(2, Math.floor(visualMax / 2)));
+  const change = rand(1, Math.max(1, Math.min(10, visualMax - start)));
+  const isTakeAway = plan.skill.constraints?.allowedProblemTypes?.includes("take-from") && Math.random() > 0.5;
+  const answer = isTakeAway ? start : start + change;
+  const scene = isTakeAway
+    ? `${start + change} poop pals are playing. ${change} roll away.`
+    : `${start} poop pals are playing. ${change} more join.`;
+  const equation = isTakeAway ? `${start + change} - ${change}` : `${start} + ${change}`;
+
+  return {
+    ...buildBaseForPlan(plan, {
+      prompt: `${scene} How many now?`,
+      speech: `${scene} How many now?`,
+      hint: isTakeAway ? "Some went away, so count what is left." : "Something was added, so count the new total.",
+      explanation: makeExplanation(
+        `${equation} makes ${answer}.`,
+        String(answer)
+      ),
+      activityType: "story-scene"
+    }),
+    choices: planNumberChoices(plan, answer, Math.max(0, answer - 4), Math.min(max, answer + 5)),
+    correctChoiceId: `choice-${answer}`,
+    groups: [
+      { id: randomId(), count: start, token: "poop", color: "#ff9b8d", label: "Start" },
+      { id: randomId(), count: change, token: "poop", color: "#7ed89f", label: isTakeAway ? "Moved" : "Added" }
+    ],
+    story: {
+      scene,
+      equation
+    }
+  };
+};
+
+const generateOddEvenFromPlan = (plan: QuestionGenerationPlan): QuestionDefinition => {
+  const total = constrainedObjectCount(plan, Math.min(20, plan.constraints.maxObjects ?? 20));
+  const correct = total % 2 === 0 ? "Even" : "Odd";
+  const promptItem: AnswerChoice = {
+    id: "prompt-group",
+    label: `${total} diapers`,
+    speechLabel: `${total} diapers`,
+    value: total,
+    renderKind: "text"
+  };
+
+  return {
+    ...buildBaseForPlan(plan, {
+      prompt: "Drag the diaper group to odd or even.",
+      speech: "Drag the diaper group to odd or even.",
+      hint: "Make pairs. If one is left over, it is odd.",
+      explanation: makeExplanation(
+        `${total} ${correct === "Even" ? "makes pairs with none left over" : "has one left over"}, so it is ${correct.toLowerCase()}.`,
+        correct
+      ),
+      activityType: "odd-even-pairing",
+      layout: "left-right"
+    }),
+    choices: [
+      { id: "zone-left", label: "Odd", speechLabel: "Odd", value: "odd", renderKind: "text" },
+      { id: "zone-right", label: "Even", speechLabel: "Even", value: "even", renderKind: "text" }
+    ],
+    correctChoiceId: correct === "Odd" ? "zone-left" : "zone-right",
+    groups: [
+      { id: randomId(), count: total, token: "diaper", color: "#9cf0ef", label: `${total} diapers` }
+    ],
+    drag: buildPromptToZoneDrag(promptItem, "Odd", "Even")
+  };
+};
+
+const generateArrayFromPlan = (plan: QuestionGenerationPlan): QuestionDefinition => {
+  const maxRows = Math.min(5, plan.constraints.maxArrayRows ?? 5);
+  const maxColumns = Math.min(5, plan.constraints.maxArrayColumns ?? 5);
+  const rows = rand(2, Math.max(2, maxRows));
+  const columns = rand(2, Math.max(2, maxColumns));
+  const total = rows * columns;
+  const repeatedAddition = Array.from({ length: rows }, () => columns).join(" + ");
+
+  return {
+    ...buildBaseForPlan(plan, {
+      prompt: plan.uxProfileId.includes("repeated") || plan.uxProfileId.includes("equation")
+        ? "Which repeated-addition sentence matches the array?"
+        : "How many are in the array?",
+      speech: plan.uxProfileId.includes("repeated") || plan.uxProfileId.includes("equation")
+        ? "Which repeated-addition sentence matches the array?"
+        : "How many are in the array?",
+      hint: `There are ${rows} rows, and each row has ${columns}.`,
+      explanation: makeExplanation(
+        `${rows} rows of ${columns} can be written as ${repeatedAddition}, which makes ${total}.`,
+        plan.uxProfileId.includes("repeated") || plan.uxProfileId.includes("equation") ? repeatedAddition : String(total)
+      ),
+      activityType: "array-counting"
+    }),
+    choices: plan.uxProfileId.includes("repeated") || plan.uxProfileId.includes("equation")
+      ? limitChoicesKeepingCorrect(textChoices(repeatedAddition, [
+          repeatedAddition,
+          Array.from({ length: columns }, () => rows).join(" + "),
+          `${rows} + ${columns}`,
+          `${total} + ${columns}`
+        ]), `correct-${repeatedAddition}`, choiceLimit(plan))
+      : planNumberChoices(plan, total, Math.max(0, total - 6), total + 8),
+    correctChoiceId: plan.uxProfileId.includes("repeated") || plan.uxProfileId.includes("equation")
+      ? `correct-${repeatedAddition}`
+      : `choice-${total}`,
+    arrayData: {
+      rows,
+      columns,
+      target: total
+    }
+  };
+};
+
+const generateDragToMatchFromPlan = (plan: QuestionGenerationPlan): QuestionDefinition => {
+  if (plan.visualModel === "shape-model") {
+    return generateShapeChoiceFromPlan(plan, "drag-to-match");
+  }
+  if (plan.visualModel === "equal-share-model") {
+    return generateEqualShareFromPlan(plan, "drag-to-match");
+  }
+  if (plan.visualModel === "coin-set") {
+    const question = generateCoinChoiceFromPlan(plan);
+    return {
+      ...question,
+      type: "drag-to-match",
+      minResponseMs: ACTIVITY_MIN_RESPONSE_MS["drag-to-match"],
+      prompt: question.prompt.replace(/^Choose/, "Drag"),
+      speech: question.speech.replace(/^Choose/, "Drag"),
+      drag: buildDragChoices(question.choices, "Matching coin")
+    };
+  }
+
+  const target = plan.visualModel === "bar-picture-graph"
+    ? sample(["Corn", "Beans", "Toast"])
+    : constrainedNumber(plan, Math.min(plan.constraints.maxNumber ?? 20, 50), 0);
+  const choices = typeof target === "number"
+    ? planNumberChoices(plan, target, Math.max(0, target - 4), target + 6)
+    : limitChoicesKeepingCorrect(
+        textChoices(target, [...new Set([target, "Beans", "Toast", "Apples"])]),
+        `correct-${target}`,
+        choiceLimit(plan)
+      );
+  const correctChoiceId = typeof target === "number" ? `choice-${target}` : `correct-${target}`;
+  const numericTarget = typeof target === "number" ? target : undefined;
+  const needsGroupModel =
+    plan.visualModel === "objects-arranged" ||
+    plan.visualModel === "objects-scattered" ||
+    plan.visualModel === "measurement-lineup" ||
+    plan.visualModel === "story-scene-model" ||
+    plan.visualModel === "part-part-whole";
+
+  return {
+    ...buildBaseForPlan(plan, {
+      prompt: "Drag the matching answer to the target.",
+      speech: "Drag the matching answer to the target.",
+      hint: "Look at the visual, then match the same value.",
+      explanation: makeExplanation(
+        `The matching answer is ${target}.`,
+        String(target)
+      ),
+      activityType: "drag-to-match"
+    }),
+    choices,
+    correctChoiceId,
+    targetLabel: "Match",
+    drag: buildDragChoices(choices, "Match"),
+    groups:
+      numericTarget !== undefined && needsGroupModel
+        ? [
+            {
+              id: randomId(),
+              count: Math.min(numericTarget, plan.constraints.maxObjects ?? 20),
+              token: "poop",
+              color: "#7ed89f",
+              label: "Model"
+            }
+          ]
+        : undefined
+  };
+};
+
+const generateChooseVisualFromPlan = (plan: QuestionGenerationPlan): QuestionDefinition => {
+  if (plan.visualModel === "shape-model") return generateShapeChoiceFromPlan(plan, "choose-the-answer");
+  if (plan.visualModel === "equal-share-model") return generateEqualShareFromPlan(plan, "choose-the-answer");
+  if (plan.visualModel === "coin-set") return generateCoinChoiceFromPlan(plan);
+  if (plan.visualModel === "measurement-lineup") return generateCompareFromPlan(plan);
+  if (plan.visualModel === "story-scene-model" || plan.visualModel === "part-part-whole") return generateStoryFromPlan(plan);
+  if (plan.visualModel === "ten-frame") return generateTenFrameFromPlan({ ...plan, activityType: "fill-ten-frame" });
+
+  const max = Math.min(plan.constraints.maxNumber ?? 20, plan.skill.level >= 8 ? 1000 : plan.skill.level >= 5 ? 120 : 20);
+  const target = constrainedNumber(plan, max, plan.skill.strandId === "number-recognition" ? 0 : 1);
+  const prompt = plan.skill.strandId === "number-recognition"
+    ? `Choose the numeral ${target}.`
+    : `Choose ${target}.`;
+
+  return {
+    ...buildBaseForPlan(plan, {
+      prompt,
+      speech: prompt,
+      hint: "Look carefully at the model and choose the matching answer.",
+      explanation: makeExplanation(
+        `${target} is the matching answer for this model.`,
+        String(target)
+      ),
+      activityType: "choose-the-answer",
+      promptCue: plan.visualModel === "objects-arranged" ? { visualKey: "poop", count: Math.min(target, 10) } : undefined
+    }),
+    choices: planNumberChoices(plan, target, Math.max(0, target - 4), target + 6),
+    correctChoiceId: `choice-${target}`,
+    groups: plan.visualModel === "objects-arranged" || plan.visualModel === "objects-scattered"
+      ? [{ id: randomId(), count: Math.min(target, plan.constraints.maxObjects ?? 20), token: "poop", color: "#7ed89f", label: "Model" }]
+      : undefined
+  };
+};
+
+const generateQuestionFromPlan = (plan: QuestionGenerationPlan): QuestionDefinition => {
+  switch (plan.activityType) {
+    case "count-and-tap":
+      return generateCountAndTapFromPlan(plan);
+    case "drag-to-match":
+      return generateDragToMatchFromPlan(plan);
+    case "choose-the-answer":
+      return generateChooseVisualFromPlan(plan);
+    case "compare-two-groups":
+      return generateCompareFromPlan(plan);
+    case "number-line-tap":
+      return generateNumberLineFromPlan(plan);
+    case "fill-ten-frame":
+      return generateTenFrameFromPlan(plan);
+    case "build-a-number":
+      return generateBuildNumberFromPlan(plan);
+    case "shape-sort":
+      return generateShapeChoiceFromPlan(plan, "shape-sort");
+    case "graph-reading":
+      return generateGraphFromPlan(plan);
+    case "clock-choice":
+      return generateClockFromPlan(plan);
+    case "coin-counting":
+      return generateCoinCountingFromPlan(plan);
+    case "story-scene":
+      return generateStoryFromPlan(plan);
+    case "odd-even-pairing":
+      return generateOddEvenFromPlan(plan);
+    case "array-counting":
+      return generateArrayFromPlan(plan);
+  }
+};
+
+const reportQuestionGenerationFailure = (
+  plan: QuestionGenerationPlan,
+  issues: QuestionValidationIssue[]
+) => {
+  if (typeof console !== "undefined") {
+    console.warn(
+      `Question generation issue for ${plan.skill.id} (${plan.uxProfileId}): ${issues
+        .map((item) => item.message)
+        .join("; ")}`
+    );
+  }
+};
+
+const repairOrFallbackQuestion = (
+  question: QuestionDefinition,
+  plan: QuestionGenerationPlan,
+  issues: QuestionValidationIssue[]
+): QuestionDefinition => {
+  const errors = getQuestionValidationErrors(issues);
+  if (errors.length === 0) {
+    return question;
+  }
+
+  const fallbackPlan: QuestionGenerationPlan = {
+    ...plan,
+    activityType: "choose-the-answer",
+    anatomy: {
+      ...plan.anatomy,
+      requiredVisualData: "choices",
+      requiredInteraction: "choice",
+      mustHaveChoices: true,
+      expectedActivityType: "choose-the-answer"
+    },
+    fallbackUsed: true,
+    fallbackReason: errors.map((item) => item.message).join("; ")
+  };
+  const target = constrainedNumber(fallbackPlan, Math.min(fallbackPlan.constraints.maxNumber ?? 20, 20), 0);
+
+  return {
+    ...buildBaseForPlan(fallbackPlan, {
+      prompt: "Choose the matching answer.",
+      speech: "Choose the matching answer.",
+      hint: "Use the picture or model to find the match.",
+      explanation: makeExplanation(
+        `${target} is the matching answer.`,
+        String(target)
+      ),
+      activityType: "choose-the-answer",
+      promptCue: { visualKey: "poop", count: Math.min(target, 10) }
+    }),
+    choices: planNumberChoices(fallbackPlan, target, Math.max(0, target - 3), target + 4),
+    correctChoiceId: `choice-${target}`,
+    groups: [
+      { id: randomId(), count: Math.min(target, 10), token: "poop", color: "#7ed89f", label: "Model" }
+    ]
+  };
+};
+
+export const generateQuestion = (skill: SkillDefinition, mode: TeachingMode): QuestionDefinition => {
+  const plan = createQuestionGenerationPlan(skill, mode);
+  const question = generateQuestionFromPlan(plan);
+  const validation = validateGeneratedQuestion(question, plan);
+  const errors = getQuestionValidationErrors(validation);
+
+  if (errors.length === 0) {
+    return question;
+  }
+
+  const repaired = repairOrFallbackQuestion(question, plan, validation);
+  const repairedValidation = validateGeneratedQuestion(
+    repaired,
+    createQuestionGenerationPlan(skill, mode)
+  );
+  const repairedErrors = getQuestionValidationErrors(repairedValidation);
+
+  if (repairedErrors.length > 0) {
+    reportQuestionGenerationFailure(plan, repairedErrors);
+  }
+
+  return repaired;
 };
 
 export const getSkill = (strandId: StrandId, level: number) =>

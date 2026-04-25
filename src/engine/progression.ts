@@ -16,6 +16,7 @@ import {
   SESSION_ITEM_TARGETS
 } from "../data/rules";
 import { generateQuestion, getSkill } from "./questions";
+import { getSkillLearningScript } from "./learningLoop";
 import { computeReadinessLabel, dateKey } from "../lib/storage";
 import type {
   ActiveSession,
@@ -441,6 +442,8 @@ export const advanceAfterAnswer = (
   const nextSession = deepClone(session);
   const skillProgress = nextProfile.skillProgress[task.skillId];
   const strandProgress = nextProfile.strandProgress[task.strandId];
+  const skill = getSkill(task.strandId, task.level);
+  const learningScript = getSkillLearningScript(skill);
   const notes: string[] = [];
   const earnedRewardIds: string[] = [];
   const masteryEligibleCorrect =
@@ -455,7 +458,7 @@ export const advanceAfterAnswer = (
 
   nextSession.currentIndex += 1;
   nextSession.completedItems += 1;
-  if (outcome.firstTryCorrect && !outcome.hintUsed) nextSession.firstTryCorrectTotal += 1;
+  if (masteryEligibleCorrect) nextSession.firstTryCorrectTotal += 1;
   if (outcome.suspiciousFast) nextSession.suspiciousFastCount += 1;
 
   if (task.mode === "example") {
@@ -497,7 +500,10 @@ export const advanceAfterAnswer = (
   const stats = getWindowStats(skillProgress);
   if (stats.fastWrong >= FAST_WRONG_RESCUE_LIMIT) {
     nextSession.supportModeTurnsLeft = 3;
-    notes.push("Too many super-fast guesses. Slowing down for support mode.");
+    notes.push(`Careful-look rescue: ${learningScript.rescue.explanation}`);
+  } else if (!outcome.correct && task.mode !== "example") {
+    nextSession.supportModeTurnsLeft = Math.max(nextSession.supportModeTurnsLeft, 2);
+    notes.push(`Rescue: ${learningScript.rescue.explanation}`);
   } else if (nextSession.supportModeTurnsLeft > 0) {
     nextSession.supportModeTurnsLeft -= 1;
   }
@@ -510,7 +516,7 @@ export const advanceAfterAnswer = (
       correct: 0
     };
     current.completed += 1;
-    if (outcome.correct && outcome.firstTryCorrect && !outcome.suspiciousFast) {
+    if (masteryEligibleCorrect) {
       current.correct += 1;
     }
     nextSession.checkpointProgress[task.skillId] = current;

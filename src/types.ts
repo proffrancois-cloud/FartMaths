@@ -1,6 +1,10 @@
 export type ProfileId = "ely" | "ira";
 
 export type AvatarId =
+  | "ninja-diaper"
+  | "ninja-pipi"
+  | "ninja-poo"
+  | "ninja-stinky"
   | "farting-emoji"
   | "pooping-emoji"
   | "toilet-roll-hero"
@@ -189,6 +193,7 @@ export type UxPedRescueMove =
   | "equal-share-overlay"
   | "act-out-story"
   | "reduce-choice-load"
+  | "build-with-guides"
   | "worked-example-reset";
 
 export type UxPedLearningPhase =
@@ -199,7 +204,10 @@ export type UxPedLearningPhase =
   | "feedback"
   | "rescue"
   | "mastery-check"
+  | "review"
   | "next-step";
+
+export type LearningPhase = UxPedLearningPhase;
 
 export interface UxPedMasteryCheck {
   requiresFirstTry?: boolean;
@@ -233,6 +241,91 @@ export interface UxPedProfile {
 export interface SkillPedagogicalUxHook {
   pedagogicalUxProfileId?: string;
   pedagogicalUxProfile?: UxPedProfile;
+}
+
+export interface SkillPedagogicalUxMapping {
+  profileId: string;
+  sourceSectionTitle?: string;
+  sourceSkillLabel?: string;
+  primaryExerciseType: UxPedExerciseType;
+  secondaryExerciseType?: UxPedExerciseType;
+  lessonModel: UxPedLessonModel;
+  visualModel: UxPedVisualModel;
+  learningGoal: string;
+  lessonFocus: string;
+  commonMistakes: string[];
+  feedbackType: UxPedFeedbackType;
+  rescueMove: UxPedRescueMove;
+  masteryCheck: string;
+  implementationNote?: string;
+}
+
+export interface LessonStep {
+  text: string;
+  visualCue?: string;
+  audioText?: string;
+}
+
+export interface WorkedExample {
+  prompt: string;
+  modelDescription: string;
+  solutionSteps: string[];
+  answerStatement: string;
+}
+
+export interface GuidedSupportDescriptor {
+  supportType: string;
+  behavior: string;
+  removeWhen?: string;
+}
+
+export interface FeedbackDescriptor {
+  correctPattern: string;
+  incorrectPattern: string;
+  misconceptionPatterns?: Record<string, string>;
+}
+
+export interface RescueDescriptor {
+  trigger: string;
+  rescueMove: UxPedRescueMove;
+  simplifiedProfile?: string;
+  explanation: string;
+}
+
+export interface MasteryCheckDescriptor {
+  mode: "no-hint" | "mixed-variation" | "timed-careful" | "review";
+  requirement: string;
+  notCountedIf: string[];
+}
+
+export interface NextStepAdviceDescriptor {
+  childMessage: string;
+  parentMessage?: string;
+  recommendedNextSkill?: string;
+}
+
+export interface SkillLearningScript {
+  skillId: string;
+  lessonTitle: string;
+  lessonBigIdea: string;
+  lessonSteps: LessonStep[];
+  workedExample: WorkedExample;
+  whatToNotice: string;
+  guidedSupport: GuidedSupportDescriptor;
+  feedback: FeedbackDescriptor;
+  rescue: RescueDescriptor;
+  masteryCheck: MasteryCheckDescriptor;
+  nextStepAdvice: NextStepAdviceDescriptor;
+}
+
+export interface PedagogicalFeedback {
+  status: "correct" | "incorrect" | "almost" | "careful-look";
+  headline: string;
+  explanation: string;
+  mathReason?: string;
+  nextAction?: string;
+  rescueSuggested?: boolean;
+  audioText?: string;
 }
 
 export interface AvatarDefinition {
@@ -272,6 +365,7 @@ export interface SkillDefinition {
   constraints?: SkillConstraints;
   pedagogicalUxProfileId?: string;
   pedagogicalUxProfile?: UxPedProfile;
+  pedagogicalUx?: SkillPedagogicalUxMapping;
   scaffold: {
     concrete: string;
     pictorial: string;
@@ -288,6 +382,7 @@ export interface StrandDefinition {
   color: string;
   mascot: string;
   description: string;
+  cardVisualSrc?: string;
   levels: SkillDefinition[];
 }
 
