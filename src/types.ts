@@ -125,6 +125,116 @@ export interface SkillAlignment {
 
 export interface SkillAlignmentSeed extends SkillAlignment {}
 
+export type UxPedExerciseType =
+  | "tap-to-count"
+  | "choose-visual-answer"
+  | "left-right-same"
+  | "drag-to-category"
+  | "build-model"
+  | "match-pair"
+  | "number-line-sequence"
+  | "story-scene"
+  | "read-model"
+  | "explain-strategy";
+
+export type UxPedLessonModel =
+  | "show-and-name"
+  | "worked-example"
+  | "step-by-step-model"
+  | "manipulative-demo"
+  | "notice-pattern"
+  | "mistake-contrast"
+  | "strategy-choice";
+
+export type UxPedVisualModel =
+  | "objects-arranged"
+  | "objects-scattered"
+  | "ten-frame"
+  | "part-part-whole"
+  | "base-ten-blocks"
+  | "number-line"
+  | "clock-face"
+  | "schedule-timeline"
+  | "coin-set"
+  | "bar-picture-graph"
+  | "shape-model"
+  | "equal-share-model"
+  | "array-grid"
+  | "measurement-lineup"
+  | "story-scene-model";
+
+export type UxPedFeedbackType =
+  | "confirm-and-name"
+  | "show-correction"
+  | "counting-error-feedback"
+  | "compare-again"
+  | "model-step-again"
+  | "strategy-reminder"
+  | "mistake-contrast-feedback"
+  | "reduce-and-retry-feedback"
+  | "transfer-praise"
+  | "next-step-feedback";
+
+export type UxPedRescueMove =
+  | "highlight-counted-objects"
+  | "reduce-set-size"
+  | "switch-scattered-to-arranged"
+  | "align-compare-groups"
+  | "show-one-more-one-less"
+  | "short-hand-first"
+  | "split-place-value"
+  | "show-unit-iteration"
+  | "highlight-relevant-graph-item"
+  | "pair-and-leftover"
+  | "equal-share-overlay"
+  | "act-out-story"
+  | "reduce-choice-load"
+  | "worked-example-reset";
+
+export type UxPedLearningPhase =
+  | "lesson"
+  | "worked-example"
+  | "guided-practice"
+  | "independent-practice"
+  | "feedback"
+  | "rescue"
+  | "mastery-check"
+  | "next-step";
+
+export interface UxPedMasteryCheck {
+  requiresFirstTry?: boolean;
+  requiresNoHint?: boolean;
+  requiresNoSuspiciousFastTap?: boolean;
+  requiresRepresentationVariation?: boolean;
+  suggestedWindow?: number;
+  notes?: string;
+}
+
+export interface UxPedProfile {
+  id: string;
+  label: string;
+  shortDescription: string;
+  primaryExerciseType: UxPedExerciseType;
+  secondaryExerciseType?: UxPedExerciseType;
+  lessonModel: UxPedLessonModel;
+  visualModel: UxPedVisualModel;
+  feedbackType: UxPedFeedbackType;
+  rescueMove: UxPedRescueMove;
+  learningGoalTemplate: string;
+  lessonFocus: string;
+  guidedSupport: string;
+  independentPracticeExpectation: string;
+  commonMistakes: string[];
+  masteryCheck: UxPedMasteryCheck;
+  implementationNotes?: string;
+  antiPatterns?: string[];
+}
+
+export interface SkillPedagogicalUxHook {
+  pedagogicalUxProfileId?: string;
+  pedagogicalUxProfile?: UxPedProfile;
+}
+
 export interface AvatarDefinition {
   id: AvatarId;
   label: string;
@@ -160,6 +270,8 @@ export interface SkillDefinition {
   isExtension: boolean;
   alignmentNotes?: string;
   constraints?: SkillConstraints;
+  pedagogicalUxProfileId?: string;
+  pedagogicalUxProfile?: UxPedProfile;
   scaffold: {
     concrete: string;
     pictorial: string;
