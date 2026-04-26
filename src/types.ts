@@ -230,7 +230,7 @@ export interface UxPedProfile {
   rescueMove: UxPedRescueMove;
   learningGoalTemplate: string;
   lessonFocus: string;
-  guidedSupport: string;
+  senseiHelp: string;
   independentPracticeExpectation: string;
   commonMistakes: string[];
   masteryCheck: UxPedMasteryCheck;
@@ -273,7 +273,7 @@ export interface WorkedExample {
   answerStatement: string;
 }
 
-export interface GuidedSupportDescriptor {
+export interface SenseiHelpDescriptor {
   supportType: string;
   behavior: string;
   removeWhen?: string;
@@ -311,7 +311,7 @@ export interface SkillLearningScript {
   lessonSteps: LessonStep[];
   workedExample: WorkedExample;
   whatToNotice: string;
-  guidedSupport: GuidedSupportDescriptor;
+  senseiHelp: SenseiHelpDescriptor;
   feedback: FeedbackDescriptor;
   rescue: RescueDescriptor;
   masteryCheck: MasteryCheckDescriptor;

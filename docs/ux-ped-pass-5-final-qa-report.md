@@ -46,7 +46,7 @@ Final lock verdict: LOCKED
 ## 7. Learning loop audit
 
 - Lesson before practice: PASS
-- Guided support behavior: PASS
+- Help from Senseiei behavior: PASS
 - Rescue behavior: PASS
 - Mastery safety: PASS
 

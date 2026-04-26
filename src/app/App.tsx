@@ -58,8 +58,6 @@ interface ReviewState {
   feedbackSpeech: string;
   explanationText: string;
   explanationSpeech: string;
-  noteText?: string;
-  rescueText?: string;
   detailText?: string;
   rewardTitles?: string[];
   nextScreen: Screen;
@@ -1357,15 +1355,6 @@ const ReviewCard = ({
         ttsEnabled={ttsEnabled}
      />
     ) : null}
-    {reviewState.detailText ? (
-      <div className="row-actions">
-        <button type="button" className="secondary-button" onClick={onOpenDetails}>
-          Further details
-        </button>
-      </div>
-    ) : null}
-    {reviewState.noteText ? <InfoPanel title="Helpful note" text={reviewState.noteText} ttsEnabled={ttsEnabled} /> : null}
-    {reviewState.rescueText ? <InfoPanel title="Rescue move" text={reviewState.rescueText} ttsEnabled={ttsEnabled} /> : null}
     {reviewState.rewardTitles && reviewState.rewardTitles.length > 0 ? (
       <div className="reward-pill-row">
         {reviewState.rewardTitles.map((title) => (
@@ -1491,8 +1480,8 @@ const TaskScreen = ({
         <>
           {hintVisible ? (
             <InfoPanel
-              title="Guided support"
-              text={`${task.question.hint}\n\n${learningScript.guidedSupport.behavior}`}
+              title="Help from Sensei"
+              text={`${task.question.hint}\n\n${learningScript.senseiHelp.behavior}`}
               ttsLabel="Read hint"
               onSpeak={onSpeakHint}
               ttsEnabled={ttsEnabled}
@@ -1720,7 +1709,6 @@ export default function App() {
         feedbackSpeech: pedagogicalFeedback.audioText ?? feedbackLine,
         explanationText: explanation.text,
         explanationSpeech: explanation.speech,
-        rescueText: pedagogicalFeedback.rescueSuggested ? learningScript.rescue.explanation : undefined,
         nextScreen: "dashboard",
         nextPlacement: null,
         nextProfile: placedProfile,
@@ -1736,7 +1724,6 @@ export default function App() {
       feedbackSpeech: pedagogicalFeedback.audioText ?? feedbackLine,
       explanationText: explanation.text,
       explanationSpeech: explanation.speech,
-      rescueText: pedagogicalFeedback.rescueSuggested ? learningScript.rescue.explanation : undefined,
       nextScreen: "placement",
       nextPlacement,
       bannerMessage: suspiciousFast
@@ -1836,11 +1823,6 @@ export default function App() {
     const feedbackLine = pedagogicalFeedback.headline;
     playAnswerFeedback(pedagogicalFeedback.audioText ?? feedbackLine);
 
-    const rescueText =
-      !correct && pedagogicalFeedback.rescueSuggested
-        ? learningScript.rescue.explanation
-        : undefined;
-
     setReviewState({
       scope: "practice",
       correct,
@@ -1848,14 +1830,6 @@ export default function App() {
       feedbackSpeech: pedagogicalFeedback.audioText ?? feedbackLine,
       explanationText: explanation.text,
       explanationSpeech: explanation.speech,
-      noteText:
-        result.notes.join(" ") ||
-        (hintUsed
-          ? firstTryCorrect
-            ? "This round used support, so it does not count for mastery."
-            : "This one was fixed after a mistake, so it does not count as a first-try mastery win."
-          : undefined),
-      rescueText,
       detailText: buildReviewDetails({
         question: currentTask.question,
         correct,

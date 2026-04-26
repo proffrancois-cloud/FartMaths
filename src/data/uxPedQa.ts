@@ -181,7 +181,7 @@ const profileEntries = () => {
     rescueMove: profile.rescueMove,
     learningGoal: profile.learningGoalTemplate,
     lessonFocus: profile.lessonFocus,
-    guidedSupport: profile.guidedSupport,
+    senseiHelp: profile.senseiHelp,
     commonMistakes: profile.commonMistakes,
     masteryCheck: profile.independentPracticeExpectation
   }));
@@ -200,7 +200,7 @@ const profileEntries = () => {
       rescueMove: profile.rescueMove,
       learningGoal: profile.learningGoal,
       lessonFocus: profile.lessonFocus,
-      guidedSupport: profile.implementationNote ?? profile.lessonFocus,
+      senseiHelp: profile.implementationNote ?? profile.lessonFocus,
       commonMistakes: profile.commonMistakes,
       masteryCheck: profile.masteryCheck
     }));
@@ -420,7 +420,7 @@ export const auditTaxonomy = (): UxPedQaIssue[] => {
       ["profileId", profile.profileId],
       ["learningGoal", profile.learningGoal],
       ["lessonFocus", profile.lessonFocus],
-      ["guidedSupport", profile.guidedSupport],
+      ["senseiHelp", profile.senseiHelp],
       ["masteryCheck", profile.masteryCheck]
     ];
 

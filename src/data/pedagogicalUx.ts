@@ -113,7 +113,7 @@ export const UX_PED_PROFILES = {
     rescueMove: "highlight-counted-objects",
     learningGoalTemplate: "Count each object exactly once and use the last number as the total.",
     lessonFocus: "Touch one object for each number word.",
-    guidedSupport: "Highlight or lock each object after it is tapped.",
+    senseiHelp: "Highlight or lock each object after it is tapped.",
     independentPracticeExpectation: "Child counts without highlights unless a rescue is triggered.",
     commonMistakes: [
       "Double-counting an object",
@@ -141,7 +141,7 @@ export const UX_PED_PROFILES = {
     rescueMove: "switch-scattered-to-arranged",
     learningGoalTemplate: "Keep track while counting scattered objects and name the total.",
     lessonFocus: "Move carefully from one object to the next.",
-    guidedSupport: "Show a count path or temporarily arrange the same objects.",
+    senseiHelp: "Show a count path or temporarily arrange the same objects.",
     independentPracticeExpectation: "Child counts the scattered set without visible path support.",
     commonMistakes: [
       "Losing track in a scattered layout",
@@ -169,7 +169,7 @@ export const UX_PED_PROFILES = {
     rescueMove: "align-compare-groups",
     learningGoalTemplate: "Compare two groups by counting or matching objects, then decide more, less, or same.",
     lessonFocus: "Count or match both sides before choosing.",
-    guidedSupport: "Show both totals and optionally align objects one-to-one.",
+    senseiHelp: "Show both totals and optionally align objects one-to-one.",
     independentPracticeExpectation: "Child chooses left, right, or same without totals shown first.",
     commonMistakes: [
       "Choosing the group that looks bigger visually without counting",
@@ -197,7 +197,7 @@ export const UX_PED_PROFILES = {
     rescueMove: "show-one-more-one-less",
     learningGoalTemplate: "Use the ten-frame to see how many are filled and how many more make 10.",
     lessonFocus: "A full ten-frame means 10. Empty spaces show how many more are needed.",
-    guidedSupport: "Show filled spaces first, then invite the child to add or remove one at a time.",
+    senseiHelp: "Show filled spaces first, then invite the child to add or remove one at a time.",
     independentPracticeExpectation: "Child builds the requested amount or missing part on the frame.",
     commonMistakes: [
       "Counting filled and empty spaces together",
@@ -225,7 +225,7 @@ export const UX_PED_PROFILES = {
     rescueMove: "split-place-value",
     learningGoalTemplate: "Understand that the digits in a two-digit number represent tens and ones.",
     lessonFocus: "The first digit tells how many tens. The second digit tells how many ones.",
-    guidedSupport: "Show tens bundles and ones separated before combining them into the numeral.",
+    senseiHelp: "Show tens bundles and ones separated before combining them into the numeral.",
     independentPracticeExpectation: "Child builds or identifies the correct tens-and-ones model.",
     commonMistakes: [
       "Treating each digit as a separate object count only",
@@ -253,7 +253,7 @@ export const UX_PED_PROFILES = {
     rescueMove: "short-hand-first",
     learningGoalTemplate: "Read o'clock times by checking the short hand first and the long hand at 12.",
     lessonFocus: "Short hand tells the hour. Long hand at 12 means o'clock.",
-    guidedSupport: "Highlight the short hand first, then the long hand.",
+    senseiHelp: "Highlight the short hand first, then the long hand.",
     independentPracticeExpectation: "Child chooses the correct clock among clear distractors.",
     commonMistakes: [
       "Reading the minute hand as the hour hand",
@@ -281,7 +281,7 @@ export const UX_PED_PROFILES = {
     rescueMove: "highlight-relevant-graph-item",
     learningGoalTemplate: "Use the graph labels and bars or pictures to answer a data question.",
     lessonFocus: "Find the category first, then read its value or compare it with another category.",
-    guidedSupport: "Highlight the relevant bar, picture row, or category label.",
+    senseiHelp: "Highlight the relevant bar, picture row, or category label.",
     independentPracticeExpectation: "Child answers using the graph without decorative clues.",
     commonMistakes: [
       "Reading the wrong category",
@@ -309,7 +309,7 @@ export const UX_PED_PROFILES = {
     rescueMove: "equal-share-overlay",
     learningGoalTemplate: "Decide whether all parts of a shared whole are the same size.",
     lessonFocus: "Fair shares must be equal-size pieces of the same whole.",
-    guidedSupport: "Overlay or compare piece sizes before asking for the category.",
+    senseiHelp: "Overlay or compare piece sizes before asking for the category.",
     independentPracticeExpectation: "Child sorts or chooses fair shares from clear visual models.",
     commonMistakes: [
       "Counting pieces without checking size",
@@ -337,7 +337,7 @@ export const UX_PED_PROFILES = {
     rescueMove: "pair-and-leftover",
     learningGoalTemplate: "Make pairs and notice whether every object has a partner or one is left over.",
     lessonFocus: "Even numbers make complete pairs. Odd numbers have one leftover.",
-    guidedSupport: "Show pairing lines or group objects into two equal rows.",
+    senseiHelp: "Show pairing lines or group objects into two equal rows.",
     independentPracticeExpectation: "Child classifies odd/even and can connect to equal groups.",
     commonMistakes: [
       "Calling a number even because it looks large",
@@ -365,7 +365,7 @@ export const UX_PED_PROFILES = {
     rescueMove: "act-out-story",
     learningGoalTemplate: "Use the story action to decide whether objects join, leave, or are compared.",
     lessonFocus: "Watch what changes in the scene before choosing a number or equation.",
-    guidedSupport: "Act out the joining or leaving action with visible objects.",
+    senseiHelp: "Act out the joining or leaving action with visible objects.",
     independentPracticeExpectation: "Child solves a short visual story without dense text.",
     commonMistakes: [
       "Adding when objects are taken away",

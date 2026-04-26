@@ -1,6 +1,6 @@
 import type {
   FeedbackDescriptor,
-  GuidedSupportDescriptor,
+  SenseiHelpDescriptor,
   MasteryCheckDescriptor,
   NextStepAdviceDescriptor,
   PedagogicalFeedback,
@@ -44,7 +44,7 @@ const visualNotice: Record<UxPedVisualModel, string> = {
   "story-scene-model": "Watch what changes in the story."
 };
 
-const guidedSupportByVisual: Record<UxPedVisualModel, GuidedSupportDescriptor> = {
+const senseiHelpByVisual: Record<UxPedVisualModel, SenseiHelpDescriptor> = {
   "objects-arranged": {
     supportType: "count-highlight",
     behavior: "Highlight each counted object and keep the set easy to scan.",
@@ -362,7 +362,7 @@ const buildWorkedExample = (
   modelDescription: visualNotice[profile.visualModel],
   solutionSteps: [
     profile.lessonFocus,
-    guidedSupportByVisual[profile.visualModel].behavior,
+    senseiHelpByVisual[profile.visualModel].behavior,
     profile.masteryCheck
   ].map(toShortSentence).slice(0, skill.gradeBand === "G2" ? 3 : 2),
   answerStatement: `The model shows: ${toShortSentence(profile.learningGoal)}.`
@@ -370,7 +370,7 @@ const buildWorkedExample = (
 
 export const getSkillLearningScript = (skill: SkillDefinition): SkillLearningScript => {
   const profile = getProfile(skill);
-  const guidedSupport = guidedSupportByVisual[profile.visualModel];
+  const senseiHelp = senseiHelpByVisual[profile.visualModel];
   const rescuePreset = rescueByMove[profile.rescueMove];
 
   return {
@@ -394,7 +394,7 @@ export const getSkillLearningScript = (skill: SkillDefinition): SkillLearningScr
     ].slice(0, skill.gradeBand === "G2" ? 3 : 2),
     workedExample: buildWorkedExample(skill, profile),
     whatToNotice: visualNotice[profile.visualModel],
-    guidedSupport,
+    senseiHelp,
     feedback: feedbackByType[profile.feedbackType],
     rescue: {
       rescueMove: profile.rescueMove,
@@ -412,7 +412,7 @@ export const getSkillLearningScript = (skill: SkillDefinition): SkillLearningScr
       ]
     },
     nextStepAdvice: {
-      childMessage: `Next time: ${toShortSentence(guidedSupport.behavior).toLowerCase()}.`,
+      childMessage: `Next time: ${toShortSentence(senseiHelp.behavior).toLowerCase()}.`,
       parentMessage: `${skill.title} is supported with ${profile.lessonModel} and ${profile.visualModel}. Next support: ${rescuePreset.explanation}`,
       recommendedNextSkill: undefined
     }
