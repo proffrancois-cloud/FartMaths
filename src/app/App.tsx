@@ -2082,25 +2082,7 @@ export default function App() {
               })}
             </div>
 
-            <div className="shortcut-box">
-              <label htmlFor="name-shortcut">Or type a name shortcut</label>
-              <div className="shortcut-row">
-                <input
-                  id="name-shortcut"
-                  className="name-input"
-                  placeholder="Ély or Ira"
-                  value={nameInput}
-                  onChange={(event) => setNameInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") handleNameSubmit();
-                  }}
-                />
-                <button type="button" className="primary-button" onClick={handleNameSubmit}>
-                  Go
-                </button>
-              </div>
-              <small>Accent-insensitive: Ely, Ély, IRA, ira all work.</small>
-            </div>
+            
           </div>
         </section>
       ) : null}
