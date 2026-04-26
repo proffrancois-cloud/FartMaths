@@ -299,6 +299,19 @@ const carefulLookFeedbackLines = [
   "Butt-brain brilliance."
 ];
 
+const skillCompleteFeedbackLines = [
+  "Sweet farty victory.",
+  "Potty power success.",
+  "Toilet champion moment.",
+  "Big brain, tiny butt, right answer.",
+  "Stinky smart and correct.",
+  "Poop-tastic job.",
+  "Fart-tastic answer.",
+  "Caca genius at work.",
+  "Pipi power, correct.",
+  "Butt-brain brilliance."
+];
+
 const toShortSentence = (text: string) =>
   text.replace(/\.$/, "").split(";")[0].trim();
 
