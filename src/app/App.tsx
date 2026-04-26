@@ -1348,13 +1348,15 @@ const ReviewCard = ({
       <h3>{reviewState.feedbackText}</h3>
       <SpeakerButton label="Read feedback" onSpeak={onSpeakFeedback} small disabled={!ttsEnabled} />
     </div>
-    <InfoPanel
-      title="Correction"
-      text={reviewState.explanationText}
-      ttsLabel="Read correction"
-      onSpeak={onSpeakExplanation}
-      ttsEnabled={ttsEnabled}
-    />
+    {!reviewState.correct ? (
+      <InfoPanel
+        title="Correction"
+       text={reviewState.explanationText}
+       ttsLabel="Read correction"
+       onSpeak={onSpeakExplanation}
+        ttsEnabled={ttsEnabled}
+     />
+    ) : null}
     {reviewState.detailText ? (
       <div className="row-actions">
         <button type="button" className="secondary-button" onClick={onOpenDetails}>
