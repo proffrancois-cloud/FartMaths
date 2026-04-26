@@ -470,7 +470,7 @@ export const buildPedagogicalFeedback = ({
   return {
     status: "incorrect",
     headline,
-    explanation: `The correct answer is ${question.explanation.correctAnswerLabel}. ${script.feedback.incorrectPattern} ${mathReason}`,
+    explanation: `The correct answer is ${question.explanation.correctAnswerLabel}. ${mathReason}`,
     mathReason,
     nextAction: script.rescue.explanation,
     rescueSuggested: true,
