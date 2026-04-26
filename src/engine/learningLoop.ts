@@ -229,50 +229,74 @@ const rescueByMove: Record<UxPedRescueMove, Omit<RescueDescriptor, "rescueMove">
 };
 
 const correctFeedbackLines = [
-  "Yes, great thinking.",
-  "Correct. You found it.",
-  "Nice work. That one fits.",
-  "You got it.",
-  "Great job. Keep going.",
-  "Correct. Careful eyes.",
-  "Yes. That strategy worked.",
-  "Nice solve.",
-  "Right answer.",
-  "You nailed that one."
+  "Nice job, little stinky genius.",
+  "Yes, sweet farty brain.",
+  "Correct, potty champion.",
+  "Woohoo, clever little poop head.",
+  "You got it, toilet star.",
+  "Right answer, stinky smarty.",
+  "Boom, perfect potty math.",
+  "Yes, you clever little butt.",
+  "Great job, caca captain.",
+  "Correct, pipi pro.",
+  "You nailed it, diaper hero.",
+  "That’s right, little fart boss.",
+  "Super job, stinky feet thinker.",
+  "Yes, potty power.",
+  "You did it, toilet wizard.",
+  "Nice one, clever caca kid.",
+  "Sweet, you solved the stinky math.",
+  "Yes, butt brain for the win.",
+  "Hooray, perfect poop pick."
 ];
 
 const firstWrongFeedbackLines = [
-  "Almost. Try one more time.",
-  "Not yet. Look again.",
-  "Try again with the model.",
-  "Close. Check the important part.",
-  "One more careful try.",
-  "Pause, then choose again.",
-  "Not quite. Use the hint.",
-  "Try the smaller step.",
-  "Look at the picture again.",
-  "You can fix this one."
+  "Oops, stinky choice. Try again.",
+  "Uh-oh, wrong potty. Try again.",
+  "Yuck, that one smells wrong.",
+  "Oopsy caca, not that one.",
+  "Nope, little stinker. Try again.",
+  "That answer missed the toilet.",
+  "Pipi problem. Check again.",
+  "Stinky guess, try once more.",
+  "Not this poop, try another one.",
+  "Uh-oh, your butt guessed wrong.",
+  "That one is too stinky to be right.",
+  "Wrong potty pick. Try again.",
+  "Caca mistake. Let’s look again.",
+  "Not right yet, little fart brain.",
+  "Oops, that answer needs a fresh wipe.",
+  "That one splashed the wrong way.",
+  "Too stinky, not correct.",
+  "Your toilet guess was brave, but wrong.",
+  "Nope, that one belongs in the wrong potty.",
+  "Try again, little poop detective."
 ];
 
 const finalWrongFeedbackLines = [
-  "Good try. Let's use support.",
-  "Not yet. We'll slow it down.",
-  "That one needs a rescue move.",
-  "Good effort. Look at why.",
-  "Almost. The model will help.",
-  "Let's review the step.",
-  "Keep going with support.",
-  "This one needs another look.",
-  "Use the example, then continue.",
-  "The next one will be gentler."
+  "Good try, little stinker. Look again.",
+  "Almost, potty pal.",
+  "Close, but that one is still a bit stinky.",
+  "Nice try, caca captain.",
+  "Almost there, toilet hero.",
+  "Good try, little fart friend.",
+  "Not yet, but your potty brain is working.",
+  "So close, little poop pro.",
+  "Try again, stinky star.",
+  "Almost, couche champion."
 ];
 
 const carefulLookFeedbackLines = [
-  "Let's slow down and look together.",
-  "Careful look first.",
-  "Pause and check the model.",
-  "Slow eyes, then answer.",
-  "Let's take one more look."
+  "Sweet farty victory.",
+  "Potty power success.",
+  "Toilet champion moment.",
+  "Big brain, tiny butt, right answer.",
+  "Stinky smart and correct.",
+  "Poop-tastic job.",
+  "Fart-tastic answer.",
+  "Caca genius at work.",
+  "Pipi power, correct.",
+  "Butt-brain brilliance."
 ];
 
 const toShortSentence = (text: string) =>
@@ -415,7 +439,7 @@ export const buildPedagogicalFeedback = ({
   if (correct) {
     const headline = firstTry && !hintUsed
       ? pickFeedbackLine(correctFeedbackLines)
-      : "Nice fix. That model works.";
+      : pickFeedbackLine(skillCompleteFeedbackLines);
     return {
       status: "correct",
       headline,
