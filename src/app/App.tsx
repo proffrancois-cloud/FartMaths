@@ -2064,8 +2064,7 @@ export default function App() {
           <div className="hero card">
             <img src={toAssetUrl(APP_LOGO_SRC)} alt="FartMaths logo" className="hero-logo" width="180" height="180" />
             <MiniBadge text="Silly fun. Serious learning." tone="peach" />
-            <h2>Pick a kiddo to start today&apos;s math giggles.</h2>
-            <p>Two big profiles, no passwords, and offline-ready play on one iPad.</p>
+            <h2>Pick a ninja to start today&apos;s math giggles.</h2>
             <div className="profile-grid">
               {PROFILE_PRESETS.map((profile) => {
                 const saved = persistedState.profiles[profile.id];
@@ -2078,7 +2077,6 @@ export default function App() {
                   >
                     <AvatarArt avatarId={saved.avatarId} label={saved.displayName} large />
                     <strong>{saved.displayName}</strong>
-                    <span>Open profile</span>
                   </button>
                 );
               })}
