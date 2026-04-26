@@ -1562,3 +1562,184 @@ input {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+.mini-badge-yellow {
+  background: rgba(255, 214, 92, 0.36);
+  color: #6b4700;
+  border: 1px solid rgba(133, 89, 12, 0.18);
+}
+
+.mini-badge-brown {
+  background: rgba(117, 75, 36, 0.14);
+  color: #6c4120;
+  border: 1px solid rgba(117, 75, 36, 0.22);
+}
+
+.hero-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.home-screen {
+  min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 48px);
+  align-items: stretch;
+}
+
+.home-screen .hero {
+  width: min(1180px, 100%);
+  min-height: min(780px, calc(100vh - 56px));
+  display: grid;
+  align-content: center;
+  gap: 10px;
+}
+
+.home-screen .profile-grid {
+  width: min(920px, 100%);
+  justify-self: center;
+  margin-bottom: 0;
+}
+
+.avatar-cycle-button {
+  border: none;
+  padding: 0;
+  background: transparent;
+  border-radius: 30px;
+}
+
+.avatar-cycle-button:focus-visible {
+  outline: 4px solid rgba(117, 75, 36, 0.35);
+  outline-offset: 4px;
+}
+
+.compact-dashboard-actions {
+  justify-content: flex-start;
+}
+
+.hero-insight-card {
+  border: 2px solid rgba(117, 75, 36, 0.42);
+  background: rgba(255, 251, 240, 0.82);
+}
+
+.category-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: start;
+}
+
+.category-card {
+  aspect-ratio: 3 / 4;
+  min-height: 360px;
+  padding: 16px;
+  border: 2px solid rgba(117, 75, 36, 0.22);
+  border-radius: 20px;
+  align-content: space-between;
+}
+
+.category-card-visual {
+  min-height: 360px;
+}
+
+.category-card-visual::before {
+  opacity: 0.58;
+  transform: scale(1.01);
+}
+
+.category-card-visual::after {
+  background:
+    linear-gradient(180deg, rgba(255, 253, 246, 0.66) 0%, rgba(255, 253, 246, 0.48) 44%, rgba(255, 253, 246, 0.9) 100%),
+    linear-gradient(90deg, rgba(255, 253, 246, 0.84), rgba(255, 253, 246, 0.32));
+}
+
+.category-card-top {
+  align-items: flex-start;
+}
+
+.category-card-title-block {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(255, 253, 246, 0.72);
+  border: 1px solid rgba(117, 75, 36, 0.18);
+}
+
+.category-card-title-block h3 {
+  margin: 0;
+  font-size: clamp(1.12rem, 2.4vw, 1.55rem);
+}
+
+.category-card-title-block strong,
+.category-card-status {
+  color: #6c4120;
+}
+
+.category-card-title-block span,
+.category-card-status {
+  font-size: 0.94rem;
+}
+
+.category-card-status {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 32px;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(255, 253, 246, 0.74);
+  border: 1px solid rgba(117, 75, 36, 0.18);
+  font-weight: 800;
+}
+
+.category-card .primary-button {
+  margin-top: auto;
+}
+
+.progress-ring-compact {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: rgba(255, 253, 246, 0.72);
+}
+
+.progress-ring-compact .progress-ring-track,
+.progress-ring-compact .progress-ring-value {
+  stroke-width: 10;
+}
+
+.progress-ring-compact .progress-ring-text strong {
+  font-size: 1rem;
+}
+
+.progress-ring-compact .progress-ring-text span {
+  font-size: 0.72rem;
+}
+
+.skill-detail-modal {
+  width: min(1180px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+
+.skill-pill-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.skill-pill-actions .primary-button,
+.skill-pill-actions .secondary-button {
+  min-height: 46px;
+}
+
+@media (min-width: 680px) {
+  .home-screen .profile-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1120px) {
+  .category-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

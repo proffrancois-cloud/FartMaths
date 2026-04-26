@@ -10,7 +10,7 @@ import {
   getWindowStats,
   planDailySession
 } from "../engine/progression";
-import { getUpcomingRewards, getStrandCompletion } from "../engine/rewards";
+import { getStrandCompletion } from "../engine/rewards";
 import {
   buildPedagogicalFeedback,
   getLearningScriptSpeech,
@@ -25,7 +25,8 @@ import {
   resetSkillProgress,
   resetStrandProgress,
   resolveProfileId,
-  saveState
+  saveState,
+  validateSkillProgress
 } from "../lib/storage";
 import type {
   ActiveSession,
@@ -178,6 +179,11 @@ const getStrandSkillBuckets = (profile: ChildProfile, strand: StrandDefinition) 
 const resolveAvatar = (avatarId: AvatarId) =>
   avatarMap[avatarId] ?? AVATARS[0];
 
+const getNextAvatarId = (avatarId: AvatarId): AvatarId => {
+  const currentIndex = AVATARS.findIndex((avatar) => avatar.id === resolveAvatar(avatarId).id);
+  return AVATARS[(currentIndex + 1) % AVATARS.length].id;
+};
+
 const getChoiceSpeech = (question: QuestionDefinition) => {
   if (question.choices.length === 0) return "";
   const parts = question.choices.map((choice, index) => {
@@ -267,7 +273,7 @@ const MiniBadge = ({
   tone = "mint"
 }: {
   text: string;
-  tone?: "mint" | "peach" | "blue";
+  tone?: "mint" | "peach" | "blue" | "yellow" | "brown";
 }) => <span className={`mini-badge mini-badge-${tone}`}>{text}</span>;
 
 const SpeakerButton = ({
@@ -421,18 +427,28 @@ const AvatarArt = ({
   );
 };
 
-const ProgressRing = ({ value, label }: { value: number; label: string }) => {
-  const radius = 54;
+const ProgressRing = ({
+  value,
+  label,
+  compact = false
+}: {
+  value: number;
+  label: string;
+  compact?: boolean;
+}) => {
+  const size = compact ? 96 : 140;
+  const radius = compact ? 36 : 54;
+  const center = size / 2;
   const circumference = 2 * Math.PI * radius;
   const dash = circumference * value;
 
   return (
-    <div className="progress-ring">
-      <svg viewBox="0 0 140 140" width="140" height="140">
-        <circle cx="70" cy="70" r={radius} className="progress-ring-track" />
+    <div className={`progress-ring ${compact ? "progress-ring-compact" : ""}`}>
+      <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
+        <circle cx={center} cy={center} r={radius} className="progress-ring-track" />
         <circle
-          cx="70"
-          cy="70"
+          cx={center}
+          cy={center}
           r={radius}
           className="progress-ring-value"
           strokeDasharray={`${dash} ${circumference - dash}`}
@@ -1368,6 +1384,8 @@ const ReviewCard = ({
 const TaskScreen = ({
   task,
   learningScript,
+  progressLabel,
+  skillLabel,
   hintVisible,
   reviewState,
   ttsEnabled,
@@ -1383,6 +1401,8 @@ const TaskScreen = ({
 }: {
   task: SessionTask;
   learningScript: SkillLearningScript;
+  progressLabel?: string;
+  skillLabel?: string;
   hintVisible: boolean;
   reviewState: ReviewState | null;
   ttsEnabled: boolean;
@@ -1418,6 +1438,8 @@ const TaskScreen = ({
           <div className="task-badge-row">
             <MiniBadge text={stageTitle} tone={task.isCheckpoint ? "peach" : "mint"} />
             {task.focusLabel ? <MiniBadge text={task.focusLabel} tone="blue" /> : null}
+            {skillLabel ? <MiniBadge text={skillLabel} tone="brown" /> : null}
+            {progressLabel ? <MiniBadge text={progressLabel} tone="yellow" /> : null}
           </div>
           <h2>{instruction.title}</h2>
           {instruction.cue ? <PromptCueVisual cue={instruction.cue} /> : null}
@@ -1895,17 +1917,22 @@ export default function App() {
       .slice(0, 3);
   }, [activeChild]);
 
-  const upcomingRewards = useMemo(() => (activeChild ? getUpcomingRewards(activeChild) : []), [activeChild]);
-  const overallCounts = useMemo(
-    () => (activeChild ? getOverallMasteryCounts(activeChild) : { mastered: 0, total: 0 }),
-    [activeChild]
-  );
   const parentDetailProfile = parentDetails ? persistedState.profiles[parentDetails.profileId] : null;
   const parentDetailStrand = parentDetails ? STRAND_MAP[parentDetails.strandId] : null;
   const parentDetailBuckets =
     parentDetailProfile && parentDetailStrand
       ? getStrandSkillBuckets(parentDetailProfile, parentDetailStrand)
       : null;
+  const currentTaskSkill = currentTask ? getTaskSkill(currentTask) : null;
+  const currentPlacementSkill = currentPlacementProbe ? getTaskSkill(currentPlacementProbe) : null;
+
+  const cycleActiveAvatar = () => {
+    if (!activeChild) return;
+    updateProfile({
+      ...activeChild,
+      avatarId: getNextAvatarId(activeChild.avatarId)
+    });
+  };
 
   return (
     <main className="app-shell">
@@ -1915,18 +1942,20 @@ export default function App() {
         <span className="blob blob-three" />
       </div>
 
-      <header className="top-bar">
-        <button type="button" className="ghost-button" onClick={jumpHome}>
-          Home
-        </button>
-        <h1 className="brand-title">
-          <img src={toAssetUrl(APP_LOGO_SRC)} alt="" className="brand-logo" width="52" height="52" />
-          <span>FartMaths</span>
-        </h1>
-        <button type="button" className="ghost-button" onClick={openParent}>
-          Parent
-        </button>
-      </header>
+      {screen !== "home" ? (
+        <header className="top-bar">
+          <button type="button" className="ghost-button" onClick={jumpHome}>
+            Home
+          </button>
+          <h1 className="brand-title">
+            <img src={toAssetUrl(APP_LOGO_SRC)} alt="" className="brand-logo" width="52" height="52" />
+            <span>FartMaths</span>
+          </h1>
+          <button type="button" className="ghost-button" onClick={openParent}>
+            Parent
+          </button>
+        </header>
+      ) : null}
 
       {feedback ? <div className="feedback-banner">{feedback}</div> : null}
 
@@ -1978,22 +2007,39 @@ export default function App() {
                       <div key={skill.id} className="skill-pill">
                         <span>{skill.title}</span>
                         <small>{skill.summary}</small>
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={() => {
-                            if (!window.confirm(`Reset ${skill.title} for ${parentDetailProfile.displayName}?`)) return;
-                            setPersistedState((current) =>
-                              resetSkillProgress(current, parentDetailProfile.id, skill.id)
-                            );
-                            setParentDetails({
-                              profileId: parentDetailProfile.id,
-                              strandId: parentDetailStrand.id
-                            });
-                          }}
-                        >
-                          Reset skill
-                        </button>
+                        <div className="skill-pill-actions">
+                          <button
+                            type="button"
+                            className="secondary-button danger-button"
+                            onClick={() => {
+                              if (!window.confirm(`Reset ${skill.title} for ${parentDetailProfile.displayName}?`)) return;
+                              setPersistedState((current) =>
+                                resetSkillProgress(current, parentDetailProfile.id, skill.id)
+                              );
+                              setParentDetails({
+                                profileId: parentDetailProfile.id,
+                                strandId: parentDetailStrand.id
+                              });
+                            }}
+                          >
+                            Reset
+                          </button>
+                          <button
+                            type="button"
+                            className="primary-button"
+                            onClick={() => {
+                              setPersistedState((current) =>
+                                validateSkillProgress(current, parentDetailProfile.id, skill.id)
+                              );
+                              setParentDetails({
+                                profileId: parentDetailProfile.id,
+                                strandId: parentDetailStrand.id
+                              });
+                            }}
+                          >
+                            Validate
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2010,22 +2056,39 @@ export default function App() {
                       <div key={skill.id} className="skill-pill">
                         <span>{skill.title}</span>
                         <small>{MASTERY_LABELS[parentDetailProfile.skillProgress[skill.id].status]}</small>
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={() => {
-                            if (!window.confirm(`Reset ${skill.title} for ${parentDetailProfile.displayName}?`)) return;
-                            setPersistedState((current) =>
-                              resetSkillProgress(current, parentDetailProfile.id, skill.id)
-                            );
-                            setParentDetails({
-                              profileId: parentDetailProfile.id,
-                              strandId: parentDetailStrand.id
-                            });
-                          }}
-                        >
-                          Reset skill
-                        </button>
+                        <div className="skill-pill-actions">
+                          <button
+                            type="button"
+                            className="secondary-button danger-button"
+                            onClick={() => {
+                              if (!window.confirm(`Reset ${skill.title} for ${parentDetailProfile.displayName}?`)) return;
+                              setPersistedState((current) =>
+                                resetSkillProgress(current, parentDetailProfile.id, skill.id)
+                              );
+                              setParentDetails({
+                                profileId: parentDetailProfile.id,
+                                strandId: parentDetailStrand.id
+                              });
+                            }}
+                          >
+                            Reset
+                          </button>
+                          <button
+                            type="button"
+                            className="primary-button"
+                            onClick={() => {
+                              setPersistedState((current) =>
+                                validateSkillProgress(current, parentDetailProfile.id, skill.id)
+                              );
+                              setParentDetails({
+                                profileId: parentDetailProfile.id,
+                                strandId: parentDetailStrand.id
+                              });
+                            }}
+                          >
+                            Validate
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2062,6 +2125,14 @@ export default function App() {
       {screen === "home" ? (
         <section className="home-screen">
           <div className="hero card">
+            <div className="hero-nav">
+              <button type="button" className="ghost-button" onClick={jumpHome}>
+                Home
+              </button>
+              <button type="button" className="ghost-button" onClick={openParent}>
+                Parent
+              </button>
+            </div>
             <img src={toAssetUrl(APP_LOGO_SRC)} alt="FartMaths logo" className="hero-logo" width="180" height="180" />
             <MiniBadge text="Silly fun. Serious learning." tone="peach" />
             <h2>Pick a kiddo to start today&apos;s math giggles.</h2>
@@ -2083,26 +2154,6 @@ export default function App() {
                 );
               })}
             </div>
-
-            <div className="shortcut-box">
-              <label htmlFor="name-shortcut">Or type a name shortcut</label>
-              <div className="shortcut-row">
-                <input
-                  id="name-shortcut"
-                  className="name-input"
-                  placeholder="Ély or Ira"
-                  value={nameInput}
-                  onChange={(event) => setNameInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") handleNameSubmit();
-                  }}
-                />
-                <button type="button" className="primary-button" onClick={handleNameSubmit}>
-                  Go
-                </button>
-              </div>
-              <small>Accent-insensitive: Ely, Ély, IRA, ira all work.</small>
-            </div>
           </div>
         </section>
       ) : null}
@@ -2113,56 +2164,30 @@ export default function App() {
             <div className="dashboard-hero-grid">
               <div className="dashboard-main-panel">
                 <div className="dashboard-headline">
-                  <AvatarArt avatarId={activeChild.avatarId} label={activeChild.displayName} large />
+                  <button
+                    type="button"
+                    className="avatar-cycle-button"
+                    onClick={cycleActiveAvatar}
+                    aria-label={`Change ${activeChild.displayName}'s avatar`}
+                    title="Tap to change avatar"
+                  >
+                    <AvatarArt avatarId={activeChild.avatarId} label={activeChild.displayName} large />
+                  </button>
                   <div>
-                    <MiniBadge text={`${overallCounts.mastered}/${overallCounts.total} skills mastered`} />
-                    <h2>{activeChild.displayName}&apos;s Dashboard</h2>
-                    <p>Choose any category right away. Each one keeps its own lesson point, practice, and mastery progress.</p>
+                    <MiniBadge text="Tap avatar to change it" tone="brown" />
+                    <h2>{activeChild.displayName}</h2>
+                    <p>Pick a strand card. Each card shows the current level, progress, and readiness.</p>
                   </div>
                 </div>
 
-                <div className="dashboard-actions">
-                  <ProgressRing value={getOverallProgress(activeChild)} label="overall mastery" />
-                  <div className="stack-actions">
-                    <div className="avatar-picker-section">
-                      <div className="section-heading">
-                        <div>
-                          <h3>Choose avatar</h3>
-                          <p>Tap one of the four ninja profile pictures below.</p>
-                        </div>
-                      </div>
-                      <div className="avatar-picker">
-                        {AVATARS.map((avatar) => (
-                          <button
-                            key={avatar.id}
-                            type="button"
-                            className={`avatar-choice ${activeChild.avatarId === avatar.id ? "avatar-choice-active" : ""}`}
-                            onClick={() => updateProfile({ ...activeChild, avatarId: avatar.id })}
-                          >
-                            <AvatarArt avatarId={avatar.id} label={avatar.label} />
-                            <strong>{avatar.label}</strong>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="hero-reward-strip">
-                      <div className="section-heading">
-                        <div>
-                          <h3>Next rewards</h3>
-                          <p>The next three silly prizes are shown right here.</p>
-                        </div>
-                      </div>
-                      <div className="reward-preview-grid">
-                        {upcomingRewards.map((reward) => (
-                          <div key={reward.rewardId} className="reward-preview-card">
-                            <strong>{reward.title}</strong>
-                            <span>{reward.description}</span>
-                            <em>{reward.remaining}</em>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                <div className="dashboard-actions compact-dashboard-actions">
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => startPractice()}
+                  >
+                    Start mixed practice
+                  </button>
                 </div>
               </div>
 
@@ -2196,36 +2221,10 @@ export default function App() {
           </div>
 
           <div className="category-grid">
-            <article className="card category-card category-card-whole">
-              <div className="category-card-top">
-                <div>
-                  <MiniBadge text="Adaptive mix" tone="blue" />
-                  <h3>Whole Curriculum</h3>
-                </div>
-                <span className="category-mascot">All 13 categories together</span>
-              </div>
-              <p>Pulls from each child&apos;s current lesson point or level across the whole curriculum.</p>
-              <div className="category-progress-row">
-                <strong>{overallCounts.mastered} / {overallCounts.total}</strong>
-                <span>{Math.round(getOverallProgress(activeChild) * 100)}%</span>
-              </div>
-              <div className="category-progress-bar">
-                <span style={{ width: `${Math.round(getOverallProgress(activeChild) * 100)}%`, background: "#2fb169" }} />
-              </div>
-              <small>Uses each category&apos;s current skill and review needs.</small>
-              <small>Lesson point first when a new skill appears, then 3 practice questions.</small>
-              <button
-                type="button"
-                className="primary-button"
-                onClick={() => startPractice()}
-              >
-                Open Whole Curriculum
-              </button>
-            </article>
-
             {STRANDS.map((strand) => {
               const snapshot = getStrandSnapshot(activeChild, strand);
               const completion = getStrandCompletion(activeChild, strand.id);
+              const progressValue = completion.total === 0 ? 0 : completion.mastered / completion.total;
               const cardVisualStyle = strand.cardVisualSrc
                 ? ({
                     "--category-card-visual": `url("${toAssetUrl(strand.cardVisualSrc)}")`
@@ -2238,24 +2237,15 @@ export default function App() {
                   style={cardVisualStyle}
                 >
                   <div className="category-card-top">
-                    <div>
-                      <MiniBadge text={snapshot.readiness} tone="blue" />
-                      <h3>{strand.shortTitle}</h3>
-                    </div>
-                    <span className="category-mascot">{strand.mascot}</span>
+                    <MiniBadge text={snapshot.readiness} tone="brown" />
+                    <ProgressRing value={progressValue} label="done" compact />
                   </div>
-                  <p>{strand.description}</p>
-                  <div className="category-progress-row">
-                    <strong>{completion.mastered} / {completion.total}</strong>
-                    <span>{completion.percentage}%</span>
+                  <div className="category-card-title-block">
+                    <h3>{strand.shortTitle}</h3>
+                    <strong>Level {snapshot.strandProgress.currentLevel}</strong>
+                    <span>{snapshot.currentSkill.title}</span>
                   </div>
-                  <div className="category-progress-bar">
-                    <span style={{ width: `${completion.percentage}%`, background: strand.color }} />
-                  </div>
-                  <small>
-                    Level {snapshot.strandProgress.currentLevel}: {snapshot.currentSkill.title}
-                  </small>
-                  <small>{MASTERY_LABELS[snapshot.currentProgress.status]}</small>
+                  <span className="category-card-status">{MASTERY_LABELS[snapshot.currentProgress.status]}</span>
                   <button
                     type="button"
                     className="primary-button"
@@ -2288,6 +2278,8 @@ export default function App() {
               level: currentPlacementProbe.level
             }}
             learningScript={currentPlacementLearningScript!}
+            progressLabel={`Placement ${placement!.probeIndex + 1}/${placement!.probes.length}`}
+            skillLabel={currentPlacementSkill?.title}
             hintVisible={false}
             reviewState={reviewState}
             ttsEnabled={persistedState.settings.ttsEnabled}
@@ -2313,21 +2305,12 @@ export default function App() {
 
       {screen === "practice" && currentTask && activeChild && session ? (
         <section className="practice-screen">
-          <div className="session-status card">
-            <div>
-              <MiniBadge text={`${session.completedItems}/${session.targetItemCount} done`} />
-              <h2>{activeChild.displayName}&apos;s Practice</h2>
-            </div>
-            <div className="session-stats">
-              <span>{session.firstTryCorrectTotal} first-try wins</span>
-              <span>{currentTask.focusLabel ?? "Whole Curriculum"}</span>
-            </div>
-          </div>
-
           <TaskScreen
             key={currentTask.question.id}
             task={currentTask}
             learningScript={currentTaskLearningScript!}
+            progressLabel={`${session.completedItems}/${session.targetItemCount}`}
+            skillLabel={currentTaskSkill?.title}
             hintVisible={hintVisible}
             reviewState={reviewState}
             ttsEnabled={persistedState.settings.ttsEnabled}

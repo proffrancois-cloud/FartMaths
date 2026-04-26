@@ -228,8 +228,58 @@ const rescueByMove: Record<UxPedRescueMove, Omit<RescueDescriptor, "rescueMove">
   }
 };
 
+const correctFeedbackLines = [
+  "Yes, great thinking.",
+  "Correct. You found it.",
+  "Nice work. That one fits.",
+  "You got it.",
+  "Great job. Keep going.",
+  "Correct. Careful eyes.",
+  "Yes. That strategy worked.",
+  "Nice solve.",
+  "Right answer.",
+  "You nailed that one."
+];
+
+const firstWrongFeedbackLines = [
+  "Almost. Try one more time.",
+  "Not yet. Look again.",
+  "Try again with the model.",
+  "Close. Check the important part.",
+  "One more careful try.",
+  "Pause, then choose again.",
+  "Not quite. Use the hint.",
+  "Try the smaller step.",
+  "Look at the picture again.",
+  "You can fix this one."
+];
+
+const finalWrongFeedbackLines = [
+  "Good try. Let's use support.",
+  "Not yet. We'll slow it down.",
+  "That one needs a rescue move.",
+  "Good effort. Look at why.",
+  "Almost. The model will help.",
+  "Let's review the step.",
+  "Keep going with support.",
+  "This one needs another look.",
+  "Use the example, then continue.",
+  "The next one will be gentler."
+];
+
+const carefulLookFeedbackLines = [
+  "Let's slow down and look together.",
+  "Careful look first.",
+  "Pause and check the model.",
+  "Slow eyes, then answer.",
+  "Let's take one more look."
+];
+
 const toShortSentence = (text: string) =>
   text.replace(/\.$/, "").split(";")[0].trim();
+
+const pickFeedbackLine = (lines: string[]) =>
+  lines[Math.floor(Math.random() * lines.length)] ?? lines[0] ?? "";
 
 const getProfile = (skill: SkillDefinition): SkillPedagogicalUxMapping => {
   if (skill.pedagogicalUx) {
@@ -350,19 +400,22 @@ export const buildPedagogicalFeedback = ({
   const mathReason = question.explanation.text;
 
   if (suspiciousFast) {
+    const headline = pickFeedbackLine(carefulLookFeedbackLines);
     return {
       status: "careful-look",
-      headline: "Let's slow down and look together.",
+      headline,
       explanation: `That answer was very fast, so it does not count for mastery. ${mathReason}`,
       mathReason,
       nextAction: script.rescue.explanation,
       rescueSuggested: true,
-      audioText: `Let's slow down and look together. ${script.rescue.explanation}`
+      audioText: `${headline} ${script.rescue.explanation}`
     };
   }
 
   if (correct) {
-    const headline = firstTry && !hintUsed ? "Yes. That model works." : "Nice fix. That model works.";
+    const headline = firstTry && !hintUsed
+      ? pickFeedbackLine(correctFeedbackLines)
+      : "Nice fix. That model works.";
     return {
       status: "correct",
       headline,
@@ -373,14 +426,18 @@ export const buildPedagogicalFeedback = ({
     };
   }
 
+  const headline = firstTry
+    ? pickFeedbackLine(firstWrongFeedbackLines)
+    : pickFeedbackLine(finalWrongFeedbackLines);
+
   return {
     status: "incorrect",
-    headline: "Not yet. Let's use the model.",
+    headline,
     explanation: `The correct answer is ${question.explanation.correctAnswerLabel}. ${script.feedback.incorrectPattern} ${mathReason}`,
     mathReason,
     nextAction: script.rescue.explanation,
     rescueSuggested: true,
-    audioText: `Not yet. ${script.rescue.explanation}`
+    audioText: `${headline} ${script.rescue.explanation}`
   };
 };
 

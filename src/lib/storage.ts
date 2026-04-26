@@ -264,6 +264,81 @@ export const resetSkillProgress = (
   };
 };
 
+export const validateSkillProgress = (
+  state: PersistedState,
+  profileId: ProfileId,
+  skillId: string
+): PersistedState => {
+  const currentProfile = state.profiles[profileId];
+  const strand = STRANDS.find((item) => item.levels.some((skill) => skill.id === skillId));
+  const skill = strand?.levels.find((item) => item.id === skillId);
+
+  if (!strand || !skill) {
+    return state;
+  }
+
+  const skillProgress = currentProfile.skillProgress[skillId];
+  const strandProgress = currentProfile.strandProgress[strand.id];
+  const nextLevel = Math.min(skill.level + 1, strand.levels.length);
+  const highestUnlockedLevel = Math.max(strandProgress.highestUnlockedLevel, nextLevel);
+  const currentLevel = Math.max(strandProgress.currentLevel, nextLevel);
+  const nowIso = new Date().toISOString();
+  const passedCheckpoint = skillProgress.checkpointHistory.some((item) => item.passed);
+
+  return {
+    ...state,
+    profiles: {
+      ...state.profiles,
+      [profileId]: {
+        ...currentProfile,
+        strandProgress: {
+          ...currentProfile.strandProgress,
+          [strand.id]: {
+            ...strandProgress,
+            currentLevel,
+            highestUnlockedLevel,
+            readiness: computeReadinessLabel(highestUnlockedLevel, strand.id)
+          }
+        },
+        skillProgress: {
+          ...currentProfile.skillProgress,
+          [skillId]: {
+            ...skillProgress,
+            status: "mastered",
+            exampleSeen: true,
+            guidedSuccesses: Math.max(skillProgress.guidedSuccesses, 3),
+            attempts: Math.max(skillProgress.attempts, 5),
+            firstTryCorrectCount: Math.max(skillProgress.firstTryCorrectCount, 4),
+            scoredAttempts: Math.max(skillProgress.scoredAttempts, 5),
+            reviewDue: true,
+            lastPracticedAt: nowIso,
+            recentScoredResults: [
+              ...skillProgress.recentScoredResults,
+              {
+                questionId: `parent-validated-${skillId}`,
+                answeredAt: nowIso,
+                firstTryCorrect: true,
+                suspiciousFast: false,
+                responseTimeMs: 2000
+              }
+            ].slice(-5),
+            checkpointHistory: passedCheckpoint
+              ? skillProgress.checkpointHistory
+              : [
+                  ...skillProgress.checkpointHistory,
+                  {
+                    attemptedAt: nowIso,
+                    score: 5,
+                    passed: true
+                  }
+                ]
+          }
+        }
+      }
+    }
+  };
+};
+
 export const dateKey = (dateLike: string | Date = new Date()) => {
   const date = typeof dateLike === "string" ? new Date(dateLike) : dateLike;
   return date.toISOString().slice(0, 10);
