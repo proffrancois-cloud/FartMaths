@@ -110,7 +110,7 @@ No backend and no login system are required.
 
 Use the bundled Node toolchain in this workspace or your normal Node install.
 
-### Option A: normal Node on your machine
+### normal Node on your machine
 
 ```bash
 npm install
@@ -118,13 +118,6 @@ npm run dev
 ```
 
 Then open the local Vite URL in Safari on the iPad or desktop browser.
-
-### Option B: bundled Node from this workspace
-
-```bash
-PATH="/Users/francoismo/Documents/Playground/tools/node-v24.14.1-darwin-arm64/bin:$PATH" npm install
-PATH="/Users/francoismo/Documents/Playground/tools/node-v24.14.1-darwin-arm64/bin:$PATH" npm run dev
-```
 
 ## Build for production
 
