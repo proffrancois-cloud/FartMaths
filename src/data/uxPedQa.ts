@@ -215,7 +215,7 @@ const getDuplicateValues = (values: string[]) => {
 };
 
 const textContainsUnsafeTone = (text: string) =>
-  /\b(stupid|dumb|bad answer|easy one|poop head|butt brain|little stinker|wrong potty|stinky choice|your butt guessed wrong)\b/i.test(text);
+  /\b(dick|fuck|ass|pussy)\b/i.test(text);
 
 const hasCorrectChoice = (question: QuestionDefinition) => {
   if (question.choices.some((choice) => choice.id === question.correctChoiceId)) {
