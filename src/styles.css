@@ -415,12 +415,13 @@ button {
 
 .dashboard-hero {
   display: grid;
-  gap: 18px;
+  gap: 12px;
+  padding: 14px;
 }
 
 .dashboard-hero-grid {
   display: grid;
-  gap: 18px;
+  gap: 12px;
 }
 
 .dashboard-headline,
@@ -446,17 +447,20 @@ button {
 .avatar-picker-section,
 .review-detail-text {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .profile-insights {
   align-content: start;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
 }
 
 .hero-insight-card {
-  padding: 16px;
-  border-radius: 24px;
+  padding: 12px;
+  border-radius: 18px;
   background: rgba(255, 255, 255, 0.52);
+  align-content: start;
 }
 
 .hero-reward-strip {
@@ -535,16 +539,26 @@ button {
 .strand-list,
 .parent-strand-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .strand-row,
 .parent-strand-row {
   display: grid;
-  gap: 4px;
-  padding: 14px;
-  border-radius: 18px;
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.58);
+}
+
+.strand-row strong {
+  font-size: 0.98rem;
+}
+
+.strand-row span,
+.strand-row small {
+  font-size: 0.84rem;
+  line-height: 1.25;
 }
 
 .session-status {
@@ -625,6 +639,24 @@ button {
   place-items: center;
   gap: 8px;
   font-size: 1.12rem;
+}
+
+.choice-grid-left-right {
+  gap: 8px;
+}
+
+.choice-grid-left-right .choice-button {
+  min-height: 68px;
+  padding: 8px 6px;
+  font-size: 0.98rem;
+}
+
+.choice-grid-left-right .choice-visual-stack {
+  gap: 4px;
+}
+
+.choice-grid-left-right .position-arrow {
+  font-size: 1.24rem;
 }
 
 .choice-button span {
@@ -1317,6 +1349,21 @@ input {
   background: rgba(255, 255, 255, 0.76);
 }
 
+.review-transparent-message {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.review-transparent-message p {
+  margin: 0;
+  color: #21352d;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .review-card-correct {
   border: 2px solid rgba(46, 138, 88, 0.24);
 }
@@ -1536,7 +1583,8 @@ input {
   }
 
   .dashboard-hero-grid {
-    grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+    grid-template-columns: minmax(180px, 0.55fr) minmax(0, 1.45fr);
+    align-items: stretch;
   }
 
   .parent-strand-row {
@@ -1606,6 +1654,14 @@ input {
   padding: 0;
   background: transparent;
   border-radius: 30px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+
+.avatar-cycle-button h2 {
+  margin: 0;
 }
 
 .avatar-cycle-button:focus-visible {
@@ -1615,6 +1671,10 @@ input {
 
 .compact-dashboard-actions {
   justify-content: flex-start;
+}
+
+.dashboard-main-panel {
+  align-content: center;
 }
 
 .hero-insight-card {

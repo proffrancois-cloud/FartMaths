@@ -835,9 +835,15 @@ const ChoiceGridActivity = ({
         : question.presentation.layout === "clock-grid" || question.type === "clock-choice"
           ? "choice-grid-clock"
           : "choice-grid-standard";
+  const gridStyle =
+    question.presentation.layout === "left-right"
+      ? ({
+          gridTemplateColumns: `repeat(${question.choices.length}, minmax(0, 1fr))`
+        } as CSSProperties)
+      : undefined;
 
   return (
-    <div className={`choice-grid ${layoutClass}`}>
+    <div className={`choice-grid ${layoutClass}`} style={gridStyle}>
       {question.choices.map((choice, index) => (
         <button
           key={choice.id}
@@ -1349,12 +1355,16 @@ const ReviewCard = ({
     {!reviewState.correct ? (
       <InfoPanel
         title="Correction"
-       text={reviewState.explanationText}
-       ttsLabel="Read correction"
-       onSpeak={onSpeakExplanation}
+        text={reviewState.explanationText}
+        ttsLabel="Read correction"
+        onSpeak={onSpeakExplanation}
         ttsEnabled={ttsEnabled}
-     />
-    ) : null}
+      />
+    ) : (
+      <div className="review-transparent-message" aria-live="polite">
+        <p>{reviewState.explanationText}</p>
+      </div>
+    )}
     {reviewState.rewardTitles && reviewState.rewardTitles.length > 0 ? (
       <div className="reward-pill-row">
         {reviewState.rewardTitles.map((title) => (
@@ -1365,7 +1375,7 @@ const ReviewCard = ({
       </div>
     ) : null}
     <button type="button" className="primary-button" onClick={onContinue}>
-      Continue
+      Next
     </button>
   </div>
 );
@@ -2137,10 +2147,9 @@ export default function App() {
                     aria-label={`Change ${activeChild.displayName}'s avatar`}
                     title="Tap to change avatar"
                   >
-                    <AvatarArt avatarId={activeChild.avatarId} label={activeChild.displayName} large /> <h2>{activeChild.displayName}</h2>
+                    <AvatarArt avatarId={activeChild.avatarId} label={activeChild.displayName} large />
+                    <h2>{activeChild.displayName}</h2>
                   </button>
-                  <div>
-                  </div>
                 </div>
 
                 <div className="dashboard-actions compact-dashboard-actions">

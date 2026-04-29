@@ -445,7 +445,7 @@ export const buildPedagogicalFeedback = ({
       mathReason,
       nextAction: script.rescue.explanation,
       rescueSuggested: true,
-      audioText: `${headline} ${script.rescue.explanation}`
+      audioText: headline
     };
   }
 
@@ -474,7 +474,7 @@ export const buildPedagogicalFeedback = ({
     mathReason,
     nextAction: script.rescue.explanation,
     rescueSuggested: true,
-    audioText: `${headline} ${script.rescue.explanation}`
+    audioText: headline
   };
 };
 
