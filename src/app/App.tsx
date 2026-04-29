@@ -1740,11 +1740,6 @@ export default function App() {
     setSession(planDailySession(activeChild, DEFAULT_SESSION_LENGTH, preferredStrandId));
     setReviewState(null);
     setScreen("practice");
-    setFeedback(
-      preferredStrandId
-        ? `${STRAND_MAP[preferredStrandId].shortTitle} is ready. First comes one lesson point, then practice.`
-        : "Whole curriculum is ready. Each lesson point is followed by practice from that same skill."
-    );
   };
 
   const handleSessionAnswer = (choiceId: string) => {
@@ -2206,14 +2201,13 @@ export default function App() {
                 >
                   <div className="category-card-top">
                     <MiniBadge text={snapshot.readiness} tone="brown" />
+                    <strong>Level {snapshot.strandProgress.currentLevel}</strong>
                     <ProgressRing value={progressValue} label="done" compact />
                   </div>
                   <div className="category-card-title-block">
                     <h3>{strand.shortTitle}</h3>
-                    <strong>Level {snapshot.strandProgress.currentLevel}</strong>
                     <span>{snapshot.currentSkill.title}</span>
                   </div>
-                  <span className="category-card-status">{MASTERY_LABELS[snapshot.currentProgress.status]}</span>
                   <button
                     type="button"
                     className="primary-button"
