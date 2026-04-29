@@ -2109,7 +2109,6 @@ export default function App() {
               </button>
             </div>
             <img src={toAssetUrl(APP_LOGO_SRC)} alt="FartMaths logo" className="hero-logo" width="180" height="180" />
-            <MiniBadge text="Silly fun. Serious learning." tone="peach" />
             <h2>Pick a kiddo to start today&apos;s math giggles.</h2>
             <p>Two big profiles, no passwords, and offline-ready play on one iPad.</p>
             <div className="profile-grid">
@@ -2146,12 +2145,9 @@ export default function App() {
                     aria-label={`Change ${activeChild.displayName}'s avatar`}
                     title="Tap to change avatar"
                   >
-                    <AvatarArt avatarId={activeChild.avatarId} label={activeChild.displayName} large />
+                    <AvatarArt avatarId={activeChild.avatarId} label={activeChild.displayName} large /> <h2>{activeChild.displayName}</h2>
                   </button>
                   <div>
-                    <MiniBadge text="Tap avatar to change it" tone="brown" />
-                    <h2>{activeChild.displayName}</h2>
-                    <p>Pick a strand card. Each card shows the current level, progress, and readiness.</p>
                   </div>
                 </div>
 
